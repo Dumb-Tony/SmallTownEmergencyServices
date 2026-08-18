@@ -11,7 +11,12 @@ traffic whether or not anybody has driven to them. Nothing pauses when you open 
 nothing waits at the edge of a trigger volume, and losing a call does not end the shift —
 it changes the town you turn up to next time.
 
-See [GDD.md](GDD.md) for the design this is built against.
+See [GDD.md](GDD.md) for the design this is built against, and
+[CHANGELOG.md](CHANGELOG.md) for what has actually been built.
+
+![The engine spotted at a working structure fire, with two other calls outstanding](docs/scene.png)
+
+![Main Street at driving zoom, four calls on the board](docs/town.png)
 
 ## Running it
 

@@ -126,12 +126,17 @@ export function stepVictims(state, dtMs) {
     }
 
     /* live wires do not care that someone is already having a bad day */
+    // Reported once. A casualty lying inside a live zone is not news every two
+    // seconds, and the radio said so five times in a row before this guard existed.
     const zone = liveZoneAt(state, v.x, v.y);
     if (zone && v.shocked <= 0) {
       v.shocked = 2000;
       v.condition = Math.max(0, v.condition - 0.10);
       v.needsTransport = true;
-      out.push({ type: 'VICTIM_SHOCKED', victimId: v.id, incidentId: v.incidentId });
+      if (!v.shockReported) {
+        v.shockReported = true;
+        out.push({ type: 'VICTIM_SHOCKED', victimId: v.id, incidentId: v.incidentId });
+      }
     }
     if (v.shocked > 0) v.shocked -= dtMs;
 

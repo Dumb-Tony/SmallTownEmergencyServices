@@ -248,24 +248,37 @@ export class Renderer {
         ctx.fillStyle = `rgba(220,110,50,${Math.min(0.35, (c.heat - 0.15) * 0.5)})`;
         ctx.fillRect(c.x - cw / 2, c.y - ch / 2, cw, ch);
       }
-      if (!c.burning) continue;
-
-      const f = 0.72 + wobble(i, t, 8) * 0.16;
-      const r = Math.min(cw, ch) * 0.52 * f;
-      const g = ctx.createRadialGradient(c.x, c.y, r * 0.15, c.x, c.y, r * 1.5);
-      g.addColorStop(0, 'rgba(255,242,180,0.95)');
-      g.addColorStop(0.45, 'rgba(255,150,40,0.85)');
-      g.addColorStop(1, 'rgba(190,50,20,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(c.x, c.y, r * 1.5, 0, Math.PI * 2); ctx.fill();
     }
-  }
 
-  drawSmoke(ctx, fire, t) {
-    let n = 0;
-    for (let i = 0; i < fire.cells.length && n < 26; i++) {
+    // Flame in a second, additive pass so that adjacent burning cells merge into one
+    // body of fire instead of reading as a tidy grid of orange lamps. The grid is the
+    // simulation's business, not the player's.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < fire.cells.length; i++) {
       const c = fire.cells[i];
       if (!c.burning) continue;
+      const f = 0.80 + wobble(i, t, 8) * 0.18;
+      const r = Math.max(cw, ch) * 0.92 * f;
+      const g = ctx.createRadialGradient(c.x, c.y, r * 0.10, c.x, c.y, r);
+      g.addColorStop(0, 'rgba(255,236,170,0.55)');
+      g.addColorStop(0.40, 'rgba(255,140,32,0.42)');
+      g.addColorStop(1, 'rgba(180,40,12,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /* Smoke reads the fire; it must not hide it. A puff per burning cell buried the
+   * flame under grey circles the first time this was drawn, so the column is thinned:
+   * every third burning cell, capped at eight, and lighter. */
+  drawSmoke(ctx, fire, t) {
+    let n = 0, seen = 0;
+    for (let i = 0; i < fire.cells.length && n < 8; i++) {
+      const c = fire.cells[i];
+      if (!c.burning) continue;
+      if (seen++ % 3) continue;
       n++;
       this.drawSmokePuff(ctx, c.x, c.y, Math.min(1, c.heat), t, i);
     }
@@ -273,13 +286,13 @@ export class Renderer {
 
   drawSmokePuff(ctx, x, y, strength, t, seed) {
     for (let k = 0; k < 3; k++) {
-      const phase = (t * 0.55 + k * 0.33 + seed * 0.17) % 1;
-      const rise = phase * 9;
-      const rad = 1.6 + phase * 4.2;
-      const alpha = (1 - phase) * 0.26 * strength;
-      ctx.fillStyle = `rgba(58,56,60,${alpha.toFixed(3)})`;
+      const phase = (t * 0.5 + k * 0.33 + seed * 0.17) % 1;
+      const rise = phase * 11;
+      const rad = 1.1 + phase * 2.6;
+      const alpha = (1 - phase) * 0.13 * strength;
+      ctx.fillStyle = `rgba(66,64,70,${alpha.toFixed(3)})`;
       ctx.beginPath();
-      ctx.arc(x + wobble(seed + k, t, 1.2) * 2.2, y - rise, rad, 0, Math.PI * 2);
+      ctx.arc(x + wobble(seed + k, t, 1.2) * 2.0, y - rise, rad, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -626,7 +639,10 @@ export class Renderer {
         ctx.fillStyle = colour;
         ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(`${inc.headline} ${dm}m`, ex - Math.cos(a) * 26, ey - Math.sin(a) * 26);
+        // keep the label on screen: at the left edge it was being drawn half off it
+        const lx = Math.min(cam.cssW - 70, Math.max(70, ex - Math.cos(a) * 26));
+        const ly = Math.min(cam.cssH - 14, Math.max(14, ey - Math.sin(a) * 26));
+        ctx.fillText(`${inc.headline} ${dm}m`, lx, ly);
       }
     }
     ctx.globalAlpha = 1;

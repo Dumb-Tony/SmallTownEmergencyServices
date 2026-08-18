@@ -81,11 +81,13 @@ function standfirstFor(r) {
   return `${bits.join(' · ')}.`;
 }
 
-/** Town confidence as a phrase, for the HUD and the report. */
+/** Town confidence as a phrase, for the HUD and the report. Deliberately not the word
+ *  "patient" — it sat two centimetres from the patient count in the HUD and read as a
+ *  casualty tally. */
 export function confidenceWord(c) {
   if (c >= 0.85) return 'proud of you';
   if (c >= 0.68) return 'confident';
-  if (c >= 0.5) return 'patient';
+  if (c >= 0.5) return 'giving you time';
   if (c >= 0.32) return 'uneasy';
   if (c >= 0.15) return 'losing faith';
   return 'talking about a paid service';

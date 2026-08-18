@@ -71,8 +71,12 @@ function nextTemplate(state, rng) {
   return pickTemplate(rng, { avoidId: d.lastTemplateId, avoidFamily: d.lastFamily });
 }
 
-/** Radio traffic. Bounded — a ten-minute shift generates a lot of it. */
+/** Radio traffic. Bounded — a ten-minute shift generates a lot of it — and never
+ *  repeats itself back to back, because a message worth hearing twice in a row is
+ *  usually a bug rather than an emergency. */
 export function radio(state, text, kind = 'dispatch') {
+  const last = state.radio[state.radio.length - 1];
+  if (last && last.text === text) { last.atMs = state.simTimeMs; return text; }
   state.radio.push({ atMs: state.simTimeMs, text, kind });
   if (state.radio.length > 40) state.radio.shift();
   return text;

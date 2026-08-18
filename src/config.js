@@ -27,11 +27,12 @@ export const CONFIG = {
 
   /* ── presentation ───────────────────────────────────────────────────────── */
   render: {
-    // Readability budget, not taste: at 118 m across a 1600 px window that is ~13.5
-    // px/m, so a 4.6 m fire engine is ~62 px and a person ~9 px. Wide enough to see
-    // the next intersection while driving, tight enough to read a hose lay.
-    viewWidthM: 118,
-    viewWidthOnFootM: 76,  // zoom in when out of the cab; the work is close-up
+    // Readability budget, not taste: at 165 m across a 1600 px window that is ~9.7
+    // px/m, so a 7.6 m engine is ~74 px and a person ~7 px. Wide enough to see the
+    // next two intersections while driving — the first pass used 118/76 and the
+    // screenshot came back as one building filling the screen, with no street in it.
+    viewWidthM: 165,
+    viewWidthOnFootM: 104, // zoom in out of the cab, but never so far that the street goes
     followLerp: 5,
     fitPaddingM: 6,
     maxPixelRatio: 2,
