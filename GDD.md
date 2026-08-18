@@ -1,0 +1,279 @@
+# Small Town Emergency Services
+
+## Claude-Oriented Implementation / GDD Plan
+
+### Project mandate
+
+Build an approachable cooperative emergency-response sandbox with chaotic friendslop energy and the visual confidence of a Saturday-morning emergency show. The world plays events relatively straight. Comedy comes from physical mistakes, poor coordination, forgotten equipment, and the knock-on consequences of player decisions.
+
+The central design law is:
+
+> **The town keeps going without you.**
+
+Calls wait, worsen, combine, reroute traffic, consume equipment, and leave persistent consequences while players are busy elsewhere.
+
+---
+
+## Part I — Long-term game vision
+
+### Player fantasy
+
+One to four players begin each shift at a small volunteer station. There are no locked classes or assigned jobs. Equipment and immediate need create roles: someone drives, someone runs the hose, someone handles medical care, someone makes the questionable decision to bring a chainsaw.
+
+The player should almost always be doing one of three things:
+
+1. Physically operating something.
+2. Deciding which problem matters most.
+3. Realizing something important was forgotten.
+
+The primary source of pressure is not a timer or prescribed objective list. It is limited humans, limited apparatus, incomplete information, travel time, and simultaneous incidents in one continuous world.
+
+### The persistent town
+
+Build one compact, legible town rather than disconnected mission maps. Over time it may contain downtown, suburbs, farms, industrial sites, highway, lake, river, forest, campground, quarry, railroad, and later a small airport.
+
+Places and residents recur. Tony's Pizza can burn, remain boarded up for several shifts, undergo repairs, and reopen. A blocked road remains blocked. A damaged hydrant matters on the next call. The post-shift newspaper and incident wall reflect the group's actual history.
+
+Persistence tracks consequences, not busywork:
+
+- building condition and repair state;
+- road, utility, and hydrant state;
+- vehicle damage and location;
+- equipment location and consumables;
+- recurring NPC flags and lightweight memories;
+- town confidence, budget, and department capability;
+- recent weather and disaster aftermath.
+
+### Core systems
+
+Emergencies are combinations of reusable systems, not bespoke minigames.
+
+- **Fire:** heat, fuel, spread, smoke, airflow, suppression, utility ignition.
+- **Water:** sources, flow, depth, drainage, pumps, electricity interaction.
+- **Electricity:** powered circuits, shutoffs, damaged poles, wet hazards.
+- **Gas:** sources, leaks, accumulation, shutoffs, ignition.
+- **Vehicles:** movement, damage, occupants, fuel leaks, batteries, stabilization.
+- **Medical:** readable states (stable, injured, critical, unconscious, trapped), simple interventions that buy time.
+- **Structures:** doors, windows, utilities, obstruction, limited integrity and repair state.
+- **NPCs:** health, panic, mobility, self-preservation, bad decisions, loose memory.
+- **Weather:** modifiers that generate and connect incidents rather than launching a separate scripted level.
+
+### Interaction philosophy
+
+The complexity belongs in the situation, not the control scheme.
+
+- Primary verbs: move, grab/equip, use, enter/exit, carry/drag, radio.
+- Tools are general-purpose physical objects.
+- Arrival never starts a sealed mission instance.
+- Do not show “incorrect procedure” when the world can demonstrate the consequence.
+- Do not teleport victims, hoses, stretchers, or equipment into place in the final game.
+- Player injury creates rescue problems but uses forgiving friendslop consequences.
+- Failure changes the town; it rarely ends the campaign.
+
+### Dispatch and triage
+
+Dispatch is the signature system. Reports begin incomplete and update as callers provide information or conditions deteriorate. Players are choosing which problems not to solve yet.
+
+Calls need:
+
+- partial caller report;
+- location and uncertain classification;
+- initial priority and deterioration curve;
+- dynamic updates triggered by time or system state;
+- required capabilities that are inferred, not listed as a shopping checklist;
+- ability to transform or combine (flood + electricity + fire; crash + power line + trapped patient);
+- no hard cap of one active mission.
+
+### Vehicles and equipment
+
+Vehicles determine capability and remain physical world objects.
+
+- Engine: water and firefighting equipment; large and slower.
+- Ambulance: patient care and transport; fast, limited rescue gear.
+- Rescue pickup: tools, winch, chainsaw, stabilization and utility equipment.
+- Later apparatus broadens capability instead of providing percentage upgrades.
+
+Missing, depleted, damaged, or badly parked apparatus should create improvisation. Equipment logistics stay tactile and light rather than becoming inventory spreadsheets.
+
+### Tone and consequence
+
+Avoid cynical or gag-heavy writing. Dispatchers, residents, and the town take emergencies seriously. Comedy is generated by the mismatch between responsibility and player execution.
+
+Prefer structural, financial, reputational, and recoverable human consequences over graphic death or punitive fail screens. End shifts with a factual report and a local-news framing that acknowledges what actually happened.
+
+### Long-term progression
+
+Progression broadens the possibility space:
+
+- larger station and more bays;
+- additional apparatus and specialist equipment;
+- training that unlocks interactions or information, not forced classes;
+- town development that introduces both new value and new hazards;
+- severe weather and multi-shift aftermath;
+- optional player-operated dispatch role;
+- incident scrapbook and local newspaper.
+
+---
+
+## Part II — Initial MVP / proof-of-fun
+
+### The question this build must answer
+
+Can one small continuous town, three drivable vehicles, five incident families, and a dispatch queue reliably produce a story where players abandon one worsening problem for another and then improvise around the consequences?
+
+If the answer is not yet fun, do not add progression, character customization, elaborate destruction, or networking.
+
+### MVP scope
+
+Build a single top-down browser playfield containing:
+
+- volunteer station and equipment area;
+- 6–10 memorable buildings;
+- a small connected road network with at least two alternate routes;
+- engine, ambulance, and rescue pickup;
+- one directly controlled responder first;
+- simple enter/exit, driving, siren, tool equip, and tool use;
+- continuously running dispatch queue with multiple simultaneous calls;
+- priorities, incomplete reports, timed updates, and deterioration;
+- house fire, vehicle crash, fallen tree, medical rescue, and gas/electrical hazard families;
+- a blocked road that materially changes travel;
+- device-local town-confidence persistence;
+- no global game-over when an incident is lost.
+
+### Deliberate simplifications
+
+The initial browser build may use symbolic top-down graphics and proximity-based tool use. It may represent “physical” hose, carrying, smoke, and extrication as staged interactions rather than rigid-body simulation. It is single-player at first so the dispatch/triage loop can be evaluated before networking multiplies complexity.
+
+Do not pretend these shortcuts are final implementations. Keep data boundaries clean so they can later become world entities and multiplayer-authoritative actions.
+
+### Core loop
+
+1. Spawn at station with quiet time.
+2. Receive an incomplete call.
+3. Choose apparatus and equipment.
+4. Drive physically through town.
+5. Assess the visible state.
+6. Use the relevant general-purpose tool to reduce or transform the hazard.
+7. Receive another call before the first is safely complete.
+8. Decide whether to stay, split resources later, or accept deterioration.
+9. Experience changed routes, escalating priorities, and persistent losses.
+10. Continue operating; never drop into a mission-complete vacuum.
+
+### Incident data model
+
+Each incident should be data-driven:
+
+```ts
+type Incident = {
+  id: string;
+  family: "fire" | "crash" | "tree" | "medical" | "utility";
+  locationId: string;
+  priority: "routine" | "high" | "critical";
+  report: string;
+  ageSeconds: number;
+  danger: number;
+  stages: IncidentStage[];
+  activeHazards: HazardRef[];
+  consequences: Consequence[];
+  status: "queued" | "active" | "controlled" | "lost";
+};
+```
+
+The simulation updates incidents independently of player proximity. Rendering and UI read simulation state; they do not own it.
+
+### Suggested architecture
+
+Keep the first build small and explicit:
+
+- `Simulation`: fixed-step clock, call spawning, deterioration, transformation, resolution.
+- `TownState`: buildings, roads, utility state, saved consequences.
+- `EntityState`: player, apparatus, movable or usable equipment.
+- `IncidentCatalog`: data definitions for the five families.
+- `Input`: maps keyboard/touch/controller intent to actions.
+- `Renderer`: reads current state; never mutates simulation rules.
+- `Persistence`: versioned local save with migration/default fallback.
+- `Telemetry`: anonymous local counters for playtest questions only (travel, ignored calls, wrong-tool attempts, time to first split decision).
+
+For eventual multiplayer, plan for an authoritative host simulation with clients sending input intent. Do not add networking until the single-process simulation produces fun pressure reliably.
+
+### Build phases
+
+#### Phase 0 — Walking skeleton
+
+Town renders; player moves; three vehicles can be entered, driven, and exited; collision and alternate routes are readable.
+
+Exit gate: driving across town is understandable without instructions after one attempt.
+
+#### Phase 1 — One complete fire response
+
+Dispatch creates a house-fire report. Player chooses engine, drives, exits, equips suppression, and controls a fire that worsens over time.
+
+Exit gate: the player can explain why delay mattered and why the engine was useful.
+
+#### Phase 2 — Simultaneous calls and triage
+
+Queue medical and crash calls during the fire. Priorities and reports update while unattended. No menu pauses the simulation.
+
+Exit gate: playtesters voluntarily change plans because a new call feels more urgent.
+
+#### Phase 3 — Five systemic families
+
+Add tree blockage, staged crash extrication/medical care, and utility shutoff/ignition. Reuse tools and hazard rules.
+
+Exit gate: at least one unscripted-feeling chain reaction occurs per shift.
+
+#### Phase 4 — Consequence and replay
+
+Save confidence and simple location damage. Start the next shift with visible evidence of prior outcomes. Add a concise shift report.
+
+Exit gate: players refer to locations by name and care about a previous mistake.
+
+#### Phase 5 — Cooperative validation
+
+Only after the loop passes the prior gates, introduce two-player host-authoritative networking, apparatus contention, equipment ownership, and shared incident state.
+
+Exit gate: coordination improves outcomes while miscommunication creates recoverable stories.
+
+### Acceptance test: the signature scenario
+
+The simulation must be able to produce this without hard-scripting every beat:
+
+1. A kitchen fire starts and spreads while crews work.
+2. A crash call arrives and demands medical/rescue capability.
+3. A utility hazard at the crash changes how the victim can be reached.
+4. A fallen tree blocks the shortest route between scenes.
+5. The neglected fire worsens into a higher-priority stage.
+6. The shift continues after one incident is lost or badly damaged.
+
+### MVP non-goals
+
+Do not build yet:
+
+- realistic fluid or smoke simulation;
+- detailed medical diagnosis or pharmacology;
+- full building destruction;
+- large open world or procedural town generation;
+- class/skill trees and cosmetic customization;
+- economy beyond the smallest consequence signals;
+- boats, aircraft, hazmat, wildland fire, or major weather campaigns;
+- dedicated dispatch player role;
+- sophisticated NPC schedules or dialogue systems;
+- Steam services, matchmaking, accounts, or authoritative servers;
+- bespoke minigames per incident.
+
+### Claude implementation rules
+
+1. Keep the simulation deterministic enough to reproduce playtest failures.
+2. Prefer small data-driven additions over family-specific UI branches.
+3. Never pause incident clocks when a panel or tutorial is open during active play.
+4. Every new feature must strengthen movement, physical interaction, triage, deterioration, or consequence.
+5. If a proposed system does not strengthen the core loop, defer it.
+6. Keep controls readable: move, interact, use, select equipment, siren.
+7. Make causes visible before adding more content.
+8. Treat multiplayer as an architectural constraint, not an MVP checkbox.
+9. Preserve approachable tone and recoverable failure.
+10. Protect the central law: **the town keeps going without you.**
+
+### Current prototype status
+
+The first browser build implements the Phase 0–3 skeleton in a single continuous top-down town. It includes keyboard/touch movement, three drivable apparatus, tool retrieval constraints, five timed incident families, simultaneous dispatch calls, staged crash response, worsening priority, a road-blocking tree, and device-local town confidence. Its symbolic proximity interactions are explicitly prototype shortcuts.
