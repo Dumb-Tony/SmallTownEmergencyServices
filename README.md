@@ -18,6 +18,8 @@ See [GDD.md](GDD.md) for the design this is built against, and
 
 ![Main Street at driving zoom, four calls on the board](docs/town.png)
 
+![The shift report after ten minutes in which nobody responded to anything](docs/report.png)
+
 ## Running it
 
 ```bash

@@ -322,7 +322,7 @@ export function stepIncidents(state, dtMs, rng) {
       const someoneLost = victims.some((v) => v.lost);
       inc.status = (gutted || someoneLost) ? 'lost' : 'controlled';
       inc.resolvedMs = state.simTimeMs;
-      inc.outcomeNote = summarise(state, inc);
+      inc.outcomeNote = summariseIncident(state, inc);
       out.push({
         type: inc.status === 'lost' ? 'INCIDENT_LOST' : 'INCIDENT_CONTROLLED',
         incidentId: inc.id, burnedOut: gutted,
@@ -330,7 +330,7 @@ export function stepIncidents(state, dtMs, rng) {
     } else if (inc.danger >= CONFIG.dispatch.lostAt) {
       inc.status = 'lost';
       inc.resolvedMs = state.simTimeMs;
-      inc.outcomeNote = summarise(state, inc);
+      inc.outcomeNote = summariseIncident(state, inc);
       out.push({ type: 'INCIDENT_LOST', incidentId: inc.id });
     }
   }
@@ -359,7 +359,7 @@ export function ensureBuildingRecord(state, buildingId) {
 
 /** One factual line for the shift report. No jokes: the GDD asks for the town to take
  *  its own emergencies seriously and to let the comedy come from what the crew did. */
-function summarise(state, inc) {
+export function summariseIncident(state, inc) {
   const victims = incidentVictims(state, inc);
   const saved = victims.filter((v) => v.delivered || (victimHandled(v) && !v.lost)).length;
   const lost = victims.filter((v) => v.lost).length;

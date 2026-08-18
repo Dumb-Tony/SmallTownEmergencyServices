@@ -21,10 +21,10 @@ import { APPARATUS_DEFS, APPARATUS_BY_ID, TOOL_DEFS, RACK_ITEMS } from './data/e
 import {
   stepHazards, createFire, fireDamageFraction, resetHazardIds,
 } from './sim/hazards.js';
-import { stepVictims, resetVictimIds } from './sim/victims.js';
+import { stepVictims, resetVictimIds, victimHandled } from './sim/victims.js';
 import {
   stepIncidents, addHazard, resetIncidentIds, isOpen, openIncidents,
-  ensureBuildingRecord, incidentHazards, writeThroughDamage,
+  ensureBuildingRecord, incidentHazards, writeThroughDamage, summariseIncident,
 } from './sim/incidentSim.js';
 import { createDispatchState, stepDispatch, radio } from './sim/dispatch.js';
 import { stepPlayerMovement, stepApparatusMovement } from './sim/movement.js';
@@ -358,11 +358,21 @@ export class Game {
 
     for (const inc of s.incidents) {
       if (isOpen(inc)) {
-        inc.status = inc.danger > 0.5 ? 'lost' : 'controlled';
-        inc.outcomeNote = inc.status === 'lost' ? 'still going when the shift ended' : 'handed over';
+        // The bell is not an outcome. A call is only a win at the end of a shift on
+        // the same terms as during it — hazards out, people handled. A trunk still
+        // across Elm Street at 10:00 is not "controlled" because nobody went.
+        const hazardsClear = incidentHazards(s, inc).every((h) => h.resolved);
+        const peopleClear = s.victims
+          .filter((v) => inc.victimIds.includes(v.id))
+          .every((v) => victimHandled(v));
+        inc.status = hazardsClear && peopleClear ? 'controlled' : 'lost';
         if (inc.status === 'lost') s.outcome.lost++; else s.outcome.controlled++;
         if (!inc.everWorked) s.telemetry.callsNeverWorked++;
       }
+      // Re-summarise everything: a fire keeps eating a building after its call was
+      // given up on, so a note written at the moment of loss ("Miller Barn damaged
+      // (3%)") contradicts the damage table on the same page.
+      inc.outcomeNote = summariseIncident(s, inc);
     }
 
     s.report = buildShiftReport(s);
