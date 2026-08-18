@@ -99,6 +99,10 @@ export function stepInteraction(state, cmd, dtMs) {
   const out = [];
   const p = state.player;
 
+  // Streams are re-asserted every step by whoever is squeezing the trigger, so the
+  // renderer never draws water that stopped flowing three steps ago.
+  for (const t of state.tools) t.flowing = false;
+
   if (p.stunMs > 0) { p.useProgressMs = 0; return out; }
 
   if (cmd.interact) doInteract(state, out);
@@ -226,6 +230,9 @@ function doUse(state, dtMs, out) {
     return;
   }
 
+  // Switching target abandons the progress. Half-turning one gas valve does not
+  // half-turn the next one.
+  if (p.useTargetId !== target.id) p.useProgressMs = 0;
   p.useProgressMs += dtMs;
   p.useTargetId = target.id;
 
@@ -395,7 +402,6 @@ function useStream(state, tool, def, dtMs, out) {
 function applyHoseTether(state, out) {
   const p = state.player;
   const t = heldTool(state);
-  for (const tool of state.tools) if (tool.defId === 'hose' && tool.carrier !== 'player') tool.flowing = false;
   if (!t || t.defId !== 'hose') return;
 
   const eng = state.apparatus.find((a) => a.id === t.engineId);

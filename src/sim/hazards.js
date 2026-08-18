@@ -202,9 +202,17 @@ export function applyWater(state, ox, oy, dirX, dirY, litres, reachM = CONFIG.wa
   }
   if (!hit.length) return { landed: 0, cooled: 0 };
 
-  const share = litres / hit.length;
+  // Weight the stream by how hot each thing in the cone is. Splitting it evenly meant
+  // a cold wall two cells over soaked up as much as the seat of the fire, so a single
+  // line could never win — the first version of this file made every structure fire a
+  // total loss and the tests said so. Cold cells still get some water: pre-wetting the
+  // path of the fire is a real tactic, and 0.2 is what it is worth.
+  let totalW = 0;
+  for (const t of hit) { t.w = 0.2 + (t.c ? Math.max(0, t.c.heat) : 1.0); totalW += t.w; }
+
   let cooled = 0;
   for (const t of hit) {
+    const share = litres * (t.w / totalW);
     if (t.c) {
       const before = t.c.heat;
       t.c.heat = Math.max(0, t.c.heat - share * CONFIG.water.coolPerLitre);
@@ -260,13 +268,21 @@ function stepFire(state, fire, dt, rng, out) {
     c.fuel = Math.max(0, c.fuel - F.fuelBurnPerSec * dt);
     if (c.fuel <= 0) { c.burning = false; c.burnt = true; }
 
-    // push heat into the neighbours; diagonals count for less
+    // Push heat into the neighbours; diagonals count for less.
+    //
+    // Only into neighbours that are NOT already alight. Heat here is the thing that
+    // drives ignition, not a temperature — piling more of it onto a cell that is
+    // already burning just made that cell impossible to knock down, because a nozzle
+    // then had to out-cool the whole surrounding fire to darken one square. Working
+    // the edge of a fire has to be a winnable fight or the hose is decoration.
     const push = F.spreadPerSec * dt * Math.min(1, c.heat);
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue;
         const nx = c.ix + dx, ny = c.iy + dy;
         if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        const n = cells[ny * cols + nx];
+        if (n.burning || n.burnt) continue;
         heatAdd[ny * cols + nx] += push * (dx && dy ? F.diagonalMul : 1);
       }
     }
@@ -275,9 +291,9 @@ function stepFire(state, fire, dt, rng, out) {
   let maxHeat = 0;
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i];
-    const wetResist = 1 / (1 + c.wet * 2.5);
+    const wetResist = 1 / (1 + c.wet * 6);
     c.heat = Math.max(0, c.heat + heatAdd[i] * wetResist - (c.burning ? 0 : F.coolPerSec * dt));
-    c.heat = Math.min(1.8, c.heat);
+    c.heat = Math.min(1.25, c.heat);   // a ceiling, so a knock-down is 3 s and not 8
     c.wet = Math.max(0, c.wet - F.wetDecayPerSec * dt);
     if (!c.burning && !c.burnt && c.fuel > 0 && c.heat >= F.ignitionHeat) {
       c.burning = true;
@@ -292,20 +308,26 @@ function stepFire(state, fire, dt, rng, out) {
   fire.resolved = burning === 0 && maxHeat < F.ignitionHeat * 0.8;
 
   // Exposure. A structure this close to open flame is a second call waiting to happen.
+  //
+  // Measured against EVERY burning cell, not the first one found: the farmhouse is 6 m
+  // from the barn along its east wall and 34 m from it along its west wall, so testing
+  // one arbitrary cell meant the fire next door depended on array order.
   if (burning > 0) {
     const chance = F.jumpChancePerSec * dt * Math.min(3, burning);
     if (rng.chance(chance)) {
-      const src = cells.find((c) => c.burning);
+      let best = null, bestD = F.jumpDistM;
       for (const b of BUILDINGS) {
-        if (b.id === fire.buildingId || b.kind === 'clinic') continue;
+        if (b.id === fire.buildingId || b.kind === 'clinic' || b.kind === 'station') continue;
         if (state.hazards.some((x) => x.kind === 'fire' && x.buildingId === b.id)) continue;
-        const nx = Math.min(b.x + b.w, Math.max(b.x, src.x));
-        const ny = Math.min(b.y + b.h, Math.max(b.y, src.y));
-        if (dist(src.x, src.y, nx, ny) <= F.jumpDistM) {
-          out.push({ type: 'FIRE_EXTENDED', fromHazardId: fire.id, buildingId: b.id });
-          break;
+        for (const c of cells) {
+          if (!c.burning) continue;
+          const nx = Math.min(b.x + b.w, Math.max(b.x, c.x));
+          const ny = Math.min(b.y + b.h, Math.max(b.y, c.y));
+          const d = dist(c.x, c.y, nx, ny);
+          if (d <= bestD) { bestD = d; best = b; }
         }
       }
+      if (best) out.push({ type: 'FIRE_EXTENDED', fromHazardId: fire.id, buildingId: best.id });
     }
   }
 }

@@ -24,7 +24,7 @@ import {
 import { stepVictims, resetVictimIds } from './sim/victims.js';
 import {
   stepIncidents, addHazard, resetIncidentIds, isOpen, openIncidents,
-  ensureBuildingRecord, incidentHazards,
+  ensureBuildingRecord, incidentHazards, writeThroughDamage,
 } from './sim/incidentSim.js';
 import { createDispatchState, stepDispatch, radio } from './sim/dispatch.js';
 import { stepPlayerMovement, stepApparatusMovement } from './sim/movement.js';
@@ -201,6 +201,7 @@ export class Game {
     events.push(...stepHazards(s, stepMs, this.rng));
     events.push(...stepVictims(s, stepMs));
     applySirenEffect(s);
+    writeThroughDamage(s);
     events.push(...detectStructureLosses(s));
     events.push(...stepIncidents(s, stepMs, this.rng));
     events.push(...stepDispatch(s, stepMs, this.rng));

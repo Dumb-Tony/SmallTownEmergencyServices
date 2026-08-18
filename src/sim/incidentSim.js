@@ -219,21 +219,40 @@ export function isOpen(inc) { return inc.status === 'queued' || inc.status === '
 
 export function openIncidents(state) { return state.incidents.filter(isOpen); }
 
-/** Pressure this incident is putting on the town right now, before the clock is added. */
+/** Pressure this incident is putting on the town right now, before the clock is added.
+ *  Capped: an incident that is going badly should accelerate, not detonate. */
 function hazardPressure(state, inc) {
   let p = 0;
   for (const h of incidentHazards(state, inc)) {
     if (h.kind === 'fire') p += h.burningCount * CONFIG.fire.dangerPerBurningCell;
-    else if (h.kind === 'gas') p += h.ppm * 0.010;
-    else if (h.kind === 'power' && h.live) p += 0.004;
-    else if (h.kind === 'wreck' && h.burning) p += 0.010;
+    else if (h.kind === 'gas') p += h.ppm * 0.0030;
+    else if (h.kind === 'power' && h.live) p += 0.0015;
+    else if (h.kind === 'wreck' && h.burning) p += 0.0030;
   }
   for (const v of incidentVictims(state, inc)) {
     if (v.lost || v.delivered) continue;
-    p += (1 - v.condition) * 0.010;
-    if (v.trappedBy) p += 0.004;
+    p += (1 - v.condition) * 0.0030;
+    if (v.trappedBy) p += 0.0015;
   }
-  return p;
+  return Math.min(CONFIG.dispatch.maxHazardPressure, p);
+}
+
+/**
+ * Structural damage is written through for EVERY fire in the world, on every step,
+ * whether or not its call is still open.
+ *
+ * This lives outside the incident loop deliberately. A call that has been given up on
+ * still has a building burning down inside it, and the town has to end the shift
+ * knowing that — otherwise "we lost that one" costs nothing on the next shift, and the
+ * central law quietly stops applying to the only consequence anyone can see.
+ */
+export function writeThroughDamage(state) {
+  for (const h of state.hazards) {
+    if (h.kind !== 'fire') continue;
+    const rec = ensureBuildingRecord(state, h.buildingId);
+    const frac = fireDamageFraction(h);
+    if (frac > rec.damage) rec.damage = frac;
+  }
 }
 
 /* ── per-step update ──────────────────────────────────────────────────────── */
@@ -288,14 +307,6 @@ export function stepIncidents(state, dtMs, rng) {
       out.push({ type: 'PRIORITY_RAISED', incidentId: inc.id, priority: wanted });
     }
 
-    /* building damage is written through continuously, not at the end: leave halfway
-       and the town keeps the half that burned */
-    for (const h of hazards) {
-      if (h.kind !== 'fire') continue;
-      const rec = ensureBuildingRecord(state, h.buildingId);
-      rec.damage = Math.max(rec.damage, fireDamageFraction(h));
-    }
-
     /* status */
     if (inc.status === 'queued' && crewNear(state, inc)) {
       inc.status = 'active';
@@ -304,10 +315,18 @@ export function stepIncidents(state, dtMs, rng) {
     }
 
     if (hazardsClear && peopleClear) {
-      inc.status = 'controlled';
+      // A fire with nothing left to burn is "out", but calling that CONTROLLED would
+      // be a lie the shift report then repeats. The outcome is decided by what is left
+      // standing and who is left, not by whether the hazard list finally emptied.
+      const gutted = hazards.some((h) => h.kind === 'fire' && fireDamageFraction(h) >= 0.6);
+      const someoneLost = victims.some((v) => v.lost);
+      inc.status = (gutted || someoneLost) ? 'lost' : 'controlled';
       inc.resolvedMs = state.simTimeMs;
       inc.outcomeNote = summarise(state, inc);
-      out.push({ type: 'INCIDENT_CONTROLLED', incidentId: inc.id });
+      out.push({
+        type: inc.status === 'lost' ? 'INCIDENT_LOST' : 'INCIDENT_CONTROLLED',
+        incidentId: inc.id, burnedOut: gutted,
+      });
     } else if (inc.danger >= CONFIG.dispatch.lostAt) {
       inc.status = 'lost';
       inc.resolvedMs = state.simTimeMs;

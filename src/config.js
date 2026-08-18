@@ -71,28 +71,36 @@ export const CONFIG = {
   water: {
     nozzleFlowLps: 12,     // litres/second at the nozzle
     streamReachM: 8.5,
-    streamHalfAngleDeg: 15,
+    streamHalfAngleDeg: 20,   // +/- 3.4 m at full reach: aimable without being fiddly
     hoseMaxLengthM: 34,    // park badly and the fire is simply out of reach
     hydrantHookupM: 7.0,   // how close the engine must be spotted to a hydrant
     hydrantSupplyLps: 22,  // refill rate once hooked up
-    coolPerLitre: 0.020,   // heat removed per litre landed on a cell
-    wetPerLitre: 0.030,
+    // MEASURED: a burning cell gains fire.burnHeatGain (0.24) heat/sec. At 12 L/s the
+    // nozzle removes 0.72 heat/sec from ONE cell, so a focused stream wins comfortably
+    // and a stream spread across three cells (0.24 each) only just holds. That ratio is
+    // the whole skill of a hose line — do not raise it without re-checking m1 section A.
+    coolPerLitre: 0.110,   // heat removed per litre landed on a cell
+    wetPerLitre: 0.090,
   },
 
   /* ── fire ───────────────────────────────────────────────────────────────── */
   fire: {
     cellM: 4,
     ignitionHeat: 0.62,    // a cell catches above this
-    burnHeatGain: 0.30,    // heat/sec a burning cell adds to itself
-    spreadPerSec: 0.22,    // heat/sec pushed into each neighbour
-    diagonalMul: 0.55,
-    fuelBurnPerSec: 0.030, // ~33 s of fuel per cell at full burn
-    coolPerSec: 0.045,     // ambient cooling when nothing is burning
-    wetDecayPerSec: 0.020,
+    burnHeatGain: 0.24,    // heat/sec a burning cell adds to itself
+    // MEASURED: net of ambient cooling, one burning cell ignites a neighbour in ~9 s
+    // and two do it in ~3.5 s, so a fire accelerates but a single hose line can work
+    // the edge of it. At 0.22 the front moved 4 m every 3 s, which no crew could ever
+    // beat: every structure fire was a total loss whatever the player did.
+    spreadPerSec: 0.030,   // heat/sec pushed into each neighbour
+    diagonalMul: 0.45,
+    fuelBurnPerSec: 0.022, // ~45 s of fuel per cell at full burn
+    coolPerSec: 0.012,     // ambient cooling when nothing is burning
+    wetDecayPerSec: 0.010,
     jumpDistM: 9,          // exposure distance to the next structure
     jumpChancePerSec: 0.05,
     smokePerSec: 2.4,
-    dangerPerBurningCell: 0.055,
+    dangerPerBurningCell: 0.0006,
   },
 
   /* ── gas ────────────────────────────────────────────────────────────────── */
@@ -116,9 +124,9 @@ export const CONFIG = {
 
   /* ── medical ────────────────────────────────────────────────────────────── */
   medical: {
-    declineStable: 0.0010,   // condition lost per second, by presenting state
-    declineInjured: 0.0055,
-    declineCritical: 0.0170,
+    declineStable: 0.00015,  // condition lost per second, by presenting state
+    declineInjured: 0.0011,  // 0.80 -> critical in ~7 min
+    declineCritical: 0.0026, // 0.56 -> lost in ~3.5 min untreated
     declineTrappedMul: 1.45,
     declineFireMul: 2.2,     // being next to an active fire is not neutral
     treatMs: 5200,           // holding a medkit on a patient
@@ -152,6 +160,11 @@ export const CONFIG = {
     escalateHighAt: 0.34,      // danger thresholds for the priority stamp
     escalateCriticalAt: 0.66,
     lostAt: 1.0,
+    // MEASURED: with the cap, the very worst neglected call (a template base of
+    // 0.0035/s plus a fully-involved structure) reaches danger 1.0 in about 2 minutes,
+    // and a routine tree down would need 16. Uncapped, a spreading fire wrote off its
+    // own call in nine seconds, which read as a bug and was one.
+    maxHazardPressure: 0.004,
   },
 
   /* ── consequence ────────────────────────────────────────────────────────── */

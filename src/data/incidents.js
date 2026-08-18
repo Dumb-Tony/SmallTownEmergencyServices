@@ -31,7 +31,7 @@ export const TEMPLATES = [
     weight: 10,
     site: { kind: 'building', kinds: ['shop', 'house', 'housing'] },
     priority: 'high',
-    dangerPerSec: 0.0075,
+    dangerPerSec: 0.0025,
     capabilities: ['water', 'hose'],
     report: [
       'Caller reports smoke coming from the kitchen at {place}. Unclear if anyone is still inside.',
@@ -54,7 +54,7 @@ export const TEMPLATES = [
     weight: 5,
     site: { kind: 'building', kinds: ['barn', 'industry'] },
     priority: 'high',
-    dangerPerSec: 0.0105,
+    dangerPerSec: 0.0035,
     capabilities: ['water', 'hose'],
     report: [
       'Passer-by reports heavy smoke from {place}. Nobody has been able to raise the owner.',
@@ -73,7 +73,7 @@ export const TEMPLATES = [
     weight: 6,
     site: { kind: 'crash' },
     priority: 'routine',
-    dangerPerSec: 0.0055,
+    dangerPerSec: 0.0018,
     capabilities: ['water'],
     report: [
       'Car well alight at {place}. Driver is out and walking around.',
@@ -96,7 +96,7 @@ export const TEMPLATES = [
     weight: 9,
     site: { kind: 'crash' },
     priority: 'high',
-    dangerPerSec: 0.0060,
+    dangerPerSec: 0.0020,
     capabilities: ['medical', 'rescue'],
     report: [
       'Two vehicles into each other at {place}. Caller thinks somebody is hurt.',
@@ -122,7 +122,7 @@ export const TEMPLATES = [
     weight: 7,
     site: { kind: 'crash', nearPole: true },
     priority: 'critical',
-    dangerPerSec: 0.0085,
+    dangerPerSec: 0.0028,
     capabilities: ['rescue', 'medical', 'utility'],
     report: [
       'Single vehicle into a power pole at {place}. Caller says wires are down across the road.',
@@ -147,7 +147,7 @@ export const TEMPLATES = [
     weight: 8,
     site: { kind: 'tree' },
     priority: 'routine',
-    dangerPerSec: 0.0028,
+    dangerPerSec: 0.0010,
     capabilities: ['saw'],
     report: [
       'Large limb down across {place}. Nobody hurt, but nothing is getting past it.',
@@ -165,7 +165,7 @@ export const TEMPLATES = [
     weight: 4,
     site: { kind: 'tree' },
     priority: 'high',
-    dangerPerSec: 0.0072,
+    dangerPerSec: 0.0024,
     capabilities: ['saw', 'rescue', 'medical'],
     report: [
       'Tree has come down onto a car at {place}. Caller can hear someone inside.',
@@ -189,7 +189,7 @@ export const TEMPLATES = [
     weight: 9,
     site: { kind: 'building', kinds: [...BURNABLE, 'clinic'] },
     priority: 'high',
-    dangerPerSec: 0.0068,
+    dangerPerSec: 0.0023,
     capabilities: ['medical', 'transport'],
     report: [
       'Man at {place} with chest pain. Conscious, breathing, grey looking.',
@@ -208,7 +208,7 @@ export const TEMPLATES = [
     weight: 7,
     site: { kind: 'outdoor' },
     priority: 'routine',
-    dangerPerSec: 0.0035,
+    dangerPerSec: 0.0012,
     capabilities: ['medical'],
     report: [
       'Someone has come off a bike at {place}. Awake, but not getting up.',
@@ -226,7 +226,7 @@ export const TEMPLATES = [
     weight: 4,
     site: { kind: 'outdoor' },
     priority: 'critical',
-    dangerPerSec: 0.0090,
+    dangerPerSec: 0.0030,
     capabilities: ['rescue', 'medical', 'transport'],
     report: [
       'Someone pinned under machinery at {place}. Caller cannot lift it alone.',
@@ -249,7 +249,7 @@ export const TEMPLATES = [
     weight: 7,
     site: { kind: 'building', kinds: BURNABLE, needsGas: true },
     priority: 'high',
-    dangerPerSec: 0.0058,
+    dangerPerSec: 0.0019,
     capabilities: ['utility', 'meter'],
     report: [
       'Strong smell of gas at {place}. Caller has gone outside.',
@@ -272,7 +272,7 @@ export const TEMPLATES = [
     weight: 6,
     site: { kind: 'crash', nearPole: true },
     priority: 'high',
-    dangerPerSec: 0.0050,
+    dangerPerSec: 0.0017,
     capabilities: ['utility'],
     report: [
       'Line down across {place}. It is sparking and people are driving around it.',
