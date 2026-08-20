@@ -83,7 +83,21 @@ function wobble(i, t, speed = 6) {
  * BLACK. The truck cab, the wrecked car's cabin, the church steeple and every tool lying
  * on the ground, all silently painted black by a bitwise operator being too forgiving.
  */
+const _shadeCache = new Map();
 function shade(colour, k) {
+  /* Cached. Every face of every prism asks for a shade, with the same handful of
+     (colour, factor) pairs on every frame — three trucks alone were 76% of a frame and
+     this was part of it. A Map lookup replaces a parseInt or a regex, three rounds and
+     a template string, and the set of pairs is tiny and bounded by the palette. */
+  const key = colour + '|' + k;
+  const hit = _shadeCache.get(key);
+  if (hit !== undefined) return hit;
+  const out = computeShade(colour, k);
+  _shadeCache.set(key, out);
+  return out;
+}
+
+function computeShade(colour, k) {
   let r, g, b;
   if (colour[0] === '#') {
     const n = parseInt(colour.slice(1), 16);
@@ -357,18 +371,44 @@ export class Renderer {
   collectProps(state, t) {
     const cam = this.camera;
 
-    for (const b of BUILDINGS) this.collectBuilding(state, b, t);
+    /* Cull what is not on screen.
+     *
+     * Every building was extruded, windowed and lit on every frame no matter where the
+     * camera was, and at phone zoom — 60 m across a 420 m town — that is ten buildings
+     * drawn for nothing. Measured: buildings were 4.07 ms of a 4.80 ms frame.
+     *
+     * The test is generous on purpose. A building's drawn silhouette rises well above
+     * its footprint in this projection and leans sideways with the lean, and smoke and
+     * flame go higher still, so the margin is the tallest thing in town projected, not
+     * the footprint. Culling something that is genuinely visible is a hole in the world;
+     * keeping a few extra is a rounding error. */
+    const v = cam.visibleM;
+    const upM = (20 * cam.heightK) / cam.tilt + 30;      // tallest roof + its smoke column
+    const inView = (x, y, w = 0, h = 0) =>
+      x + w >= v.x - 24 && x <= v.x + v.w + 24 &&
+      y + h >= v.y - 12 && y <= v.y + v.h + upM;
+    this.culled = 0;
+
+    for (const b of BUILDINGS) {
+      if (!inView(b.x, b.y, b.w, b.h)) { this.culled++; continue; }
+      this.collectBuilding(state, b, t);
+    }
 
     for (let i = 0; i < TREES.length; i++) {
       const tr = TREES[i];
+      if (!inView(tr.x - 5, tr.y - 5, 10, 10)) { this.culled++; continue; }
       this.prop(tr.y, (ctx) => this.drawTree(ctx, tr.x, tr.y, i, t),
         (ctx) => this.groundShadow(ctx, tr.x, tr.y, 2.8, 3.2));
     }
 
     for (const h of HYDRANTS) {
+      if (!inView(h.x - 2, h.y - 2, 4, 4)) { this.culled++; continue; }
       this.prop(h.y, (ctx) => this.drawHydrant(ctx, state, h));
     }
     for (const p of POLES) {
+      // a pole is short but its WIRES run to the next one, which may be off screen —
+      // the wires are drawn in their own pass and are not culled with the pole
+      if (!inView(p.x - 3, p.y - 3, 6, 6)) { this.culled++; continue; }
       this.prop(p.y, (ctx) => this.drawPole(ctx, p),
         (ctx) => this.groundShadow(ctx, p.x, p.y, 0.7, 0.5));
     }
@@ -1094,10 +1134,15 @@ export class Renderer {
     const pt = (dx, dy) => ({ x: ap.x + dx * ca - dy * sa, y: ap.y + dx * sa + dy * ca });
     const quad = (x0, y0, x1, y1) => [pt(x0, y0), pt(x1, y0), pt(x1, y1), pt(x0, y1)];
 
-    // wheels first, so the body sits on them
+    /* Wheels first, so the body sits on them — but FLAT.
+     *
+     * They were four extruded prisms per truck: twenty filled and stroked polygons each,
+     * for a shape 1 m by 0.4 m that is half hidden under the body. Measured, three
+     * trucks were taking 3.4 ms of a 4.5 ms frame — 76% — and this was most of it. A
+     * dark quad at ground level reads exactly the same at every zoom the game uses. */
     for (const wx of [L * 0.30, -L * 0.26]) {
       for (const wy of [-W / 2 - 0.05, W / 2 - 0.35]) {
-        this.prism(ctx, quad(wx - 0.5, wy, wx + 0.5, wy + 0.4), 0.75, { wall: '#20232a', top: '#2c3039' });
+        this.fillPoly(ctx, quad(wx - 0.5, wy, wx + 0.5, wy + 0.4), '#20232a');
       }
     }
 

@@ -14,7 +14,7 @@ import { Camera } from '../src/render/camera.js';
 import { Renderer, shade } from '../src/render/renderer.js';
 import { Game } from '../src/game.js';
 import { clearSave } from '../src/core/persistence.js';
-import { BUILDING_BY_ID } from '../src/data/town.js';
+import { BUILDING_BY_ID, BUILDINGS } from '../src/data/town.js';
 import { WORLD } from '../src/data/town.js';
 
 /* ── harness ─────────────────────────────────────────────────────────────── */
@@ -248,9 +248,58 @@ lines.push('--- E. shading (this one cost an evening: it painted trucks black) -
   eq('E7 nonsense is passed through, not turned into black', shade('nonsense', 0.5), 'nonsense');
 }
 
+/* ── F. culling ──────────────────────────────────────────────────────────── */
+function sectionF() {
+lines.push('--- F. what is off screen is not drawn (and what is on screen still is) ---');
+  const g = freshGame(4400);
+  const s = g.state;
+  const canvas = document.createElement('canvas');
+  canvas.width = 800; canvas.height = 450;
+  const cam = freshCamera();
+  const r = new Renderer(canvas, cam);
+
+  // parked over the station, at the tight zoom a phone uses
+  cam.centre = { x: 94, y: 158 };
+  cam.viewWidthM = 60; cam._recomputeScale();
+  r.render(s, 0);
+  const tight = r.props.length;
+  const culledTight = r.culled;
+  gt('F1 a tight camera culls most of the town', culledTight, 5);
+  gt('F2 while still having something to draw', tight, 3);
+
+  cam.viewWidthM = 420; cam.centre = { x: 210, y: 150 }; cam._recomputeScale();
+  r.render(s, 0);
+  const wide = r.props.length;
+  gt('F3 the whole town on screen draws more than a street of it', wide, tight);
+  eq('F4 and culls nothing', r.culled, 0);
+  lines.push(`      ${tight} props at 60 m across (${culledTight} culled) · ${wide} at 420 m`);
+
+  /* The failure that matters is the other one: a hole in the world. Anything whose
+     footprint is inside the visible rectangle must survive, and so must anything just
+     off the top edge, because in this projection a building draws well above where it
+     stands and its smoke goes higher still. */
+  cam.viewWidthM = 60; cam.centre = { x: 192, y: 150 }; cam._recomputeScale();
+  r.render(s, 0);
+  const onScreen = BUILDINGS.filter((b) => {
+    const v = cam.visibleM;
+    return b.x + b.w >= v.x && b.x <= v.x + v.w && b.y + b.h >= v.y && b.y <= v.y + v.h;
+  });
+  gt('F5 the test camera really is looking at something', onScreen.length, 0);
+  ok('F6 every building inside the frame is still collected',
+    onScreen.every((b) => r.props.some((p) => Math.abs(p.depth - (b.y + b.h)) < 0.001)),
+    onScreen.map((b) => b.id).join(','));
+
+  const above = BUILDING_BY_ID.hardware;    // north of Main Street, draws down into view
+  cam.centre = { x: above.x + above.w / 2, y: above.y + above.h + 34 };
+  cam._recomputeScale();
+  r.render(s, 0);
+  ok('F7 a building just off the top edge is kept, because it draws down into the frame',
+    r.props.some((p) => Math.abs(p.depth - (above.y + above.h)) < 0.001));
+}
+
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
-  sectionA(); sectionB(); sectionC(); sectionD(); sectionE();
+  sectionA(); sectionB(); sectionC(); sectionD(); sectionE(); sectionF();
   emit(null);
 } catch (err) {
   fails++;
