@@ -67,6 +67,18 @@ cab drives and the other rides, a tool in someone's hands cannot be taken out of
 and a casualty already being carried cannot be picked up twice. Whoever is driving is
 also the one holding everyone else hostage when they park badly, which is the point.
 
+Or play it over the internet. **Play together** on the title card opens a room and puts
+a five-character code in the top bar; the other person types that code into the box and
+presses **Join**. There is no server: it is a direct WebRTC connection, with a public
+broker used only to introduce the two browsers.
+
+The host's town is the game. A client sends what its keys are doing and draws what comes
+back, and never steps a simulation of its own — so the two of you cannot end up
+disagreeing about whether a building burned down. Snapshots go out twelve times a second
+(a busy town measures 4.7 kB, so 55 kB/s); commands go up every frame at 76 bytes. If
+your partner drops, whatever they were holding hits the ground, whoever they were
+carrying is put down, and the shift carries on one-handed.
+
 ## What is in the town
 
 Three apparatus, and they are not interchangeable:
@@ -145,13 +157,21 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
 - `tools/m1-tests.js` — the systems: fire spread and suppression, water supply, gas
   ignition chains, live lines, blockage, patients, dispatch pacing, incident lifecycle,
   and the GDD's signature-scenario acceptance test.
+- `tools/m3-tests.js` — the netcode. A real host and a real client — two whole `Game`
+  instances — joined by a loopback link that JSON round-trips every message, in one page.
+  It proves the wire format, the authority rule (a client cannot move the host's
+  responder, and refuses to advance its own clock), what a disconnect leaves behind, and
+  what a snapshot costs. The transport itself is the one thing no test on this machine
+  can prove.
+- `tools/boot-check.js` — the page came up: no crash banner, PeerJS present, the join
+  UI built, and a session attached to the real page encoding the real town.
 - `tools/m2-tests.js` — playability. `tools/_crewbot.js` plays whole shifts through the
   real input path: same `moveAxis`, same `wasPressed` edges, same numbered slot list the
   HUD renders. It asserts the game's own thesis by running an idle control shift on the
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**304 assertions.**
+**404 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 
@@ -161,6 +181,7 @@ Deliberate MVP shortcuts, per the GDD's "deliberate simplifications":
 
 - proximity-and-facing interactions rather than rigid-body tools;
 - staged extrication and treatment rather than simulated procedure;
-- two players share one keyboard; the network transport is designed for but not built,
-  and is the remaining half of GDD Phase 5;
+- two players over the network share one host: there is no rollback and no prediction, so
+  a client sees its own movement a frame or two late;
+  the public PeerJS broker is a third party and rooms are not private;
 - no smoke or fluid simulation; smoke is a visual read of burning cells.

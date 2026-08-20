@@ -9,7 +9,7 @@
  */
 
 import { CONFIG } from './config.js';
-import { Game, MODES, toggleCoop } from './game.js';
+import { Game, MODES, toggleCoop, readCommand } from './game.js';
 import { radio } from './sim/dispatch.js';
 import { Input } from './core/input.js';
 import { Camera } from './render/camera.js';
@@ -17,6 +17,7 @@ import { Renderer } from './render/renderer.js';
 import { Hud } from './ui/hud.js';
 import { DebugOverlay } from './dev/debugOverlay.js';
 import { GameAudio } from './audio/audio.js';
+import { NetSession, ROLE } from './net/net.js';
 import { WORLD } from './data/town.js';
 
 const canvas = document.getElementById('stage');
@@ -37,6 +38,8 @@ const input = new Input(window).attach();
 const hud = new Hud(uiRoot, game);
 const debug = new DebugOverlay(uiRoot, game, renderer);
 const audio = new GameAudio();
+const net = new NetSession(game);
+net.onStatus = (st) => hud.setNetStatus(st, net);
 
 /* A browser will not give out an AudioContext before a real gesture, so the layer stays
    dead until one arrives — and must behave identically in that state, which is also the
@@ -76,10 +79,26 @@ function startShift() {
   camera.setMode('follow');
   camera.follow(game.state.player.x, game.state.player.y, 0);
 }
+
+/* The join flow. A client's shift is the host's shift, so it must NOT start its own —
+   it waits, black-screen-free, on the title card until the first snapshot lands. */
+hud.onHost = () => {
+  audio.arm();
+  if (game.state.mode === MODES.TITLE) startShift();
+  net.hostPeer();
+  hud.setNetStatus(net.status, net);
+};
+hud.onJoin = (code) => {
+  audio.arm();
+  net.joinPeer(code);
+  hud.setNetStatus(net.status, net);
+};
+hud.onLeaveNet = () => { net.leave(); hud.setNetStatus(net.status, net); };
 hud.onStart = startShift;
 hud.setMuted(audio.muted);
 
 let last = performance.now();
+let camSnapped = false;
 
 function frame(now) {
   const dt = now - last;
@@ -104,14 +123,25 @@ function frame(now) {
     camera._recomputeScale();
   }
 
+  /* Host and solo step the world; a client does not — game.frame() refuses on a client,
+     so this call is the same line either way and the difference stays in one place.
+     The command is built here rather than inside game.js because the client needs the
+     SAME object to send up the wire: a remote player is a player whose keyboard is
+     somewhere else. */
+  const localCmd = net.role === ROLE.CLIENT ? readCommand(input) : null;
   game.frame(dt, input);
+  net.pump(dt, localCmd);
+  /* A client joins mid-shift and its first snapshot can land anywhere in town; easing
+     across 200 m of it is a second of watching nothing. Snap once, then ease. */
+  const snapCam = net.role === ROLE.CLIENT && net.snapsReceived === 1 && !camSnapped;
+  if (snapCam) camSnapped = true;
 
   // Presentation only. The camera eases on REAL time and keeps easing while paused; it
   // must never feed anything back into the simulation.
   // the camera watches the crew's centre of gravity, not one nominated person
   let cx = 0, cy = 0;
   for (const r of crew) { cx += r.x; cy += r.y; }
-  camera.follow(cx / crew.length, cy / crew.length, Math.min(dt, 100) / 1000);
+  camera.follow(cx / crew.length, cy / crew.length, snapCam ? 0 : Math.min(dt, 100) / 1000);
 
   renderer.render(game.state, now);
   // Audio is the renderer's twin: same state, a different output device, and no more
@@ -127,4 +157,4 @@ requestAnimationFrame(frame);
 
 /* Test and debug handle. The smoke-test harness drives these real objects rather than
    reaching into module scope. */
-window.__STES = { game, camera, renderer, hud, debug, input, audio, CONFIG, startShift, frame };
+window.__STES = { game, camera, renderer, hud, debug, input, audio, net, CONFIG, startShift, frame };

@@ -209,3 +209,18 @@ kbd {
            background: var(--line); vertical-align: middle; }
 .chip.dim { color: var(--dim); }
 .card .keys .coopkeys { grid-column: 1 / -1; color: var(--violet); }
+
+/* ── multiplayer: the join row on the title card, the status chip up top ───── */
+#netrow{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+#netrow .or{color:#6d7a86;font-size:12px;letter-spacing:.06em}
+#netrow button.ghost{background:transparent;border:1px solid #38505f;color:#bcd3e0;
+  padding:8px 14px;border-radius:7px;font:600 13px/1 system-ui,sans-serif;cursor:pointer}
+#netrow button.ghost:hover{border-color:#5aa6c8;color:#eaf6ff;background:#12232e}
+#joincode{width:88px;background:#0b1218;border:1px solid #38505f;color:#eaf6ff;
+  padding:8px 10px;border-radius:7px;text-align:center;letter-spacing:.22em;
+  font:700 14px/1 ui-monospace,Consolas,monospace;text-transform:uppercase}
+#joincode:focus{outline:none;border-color:#5aa6c8}
+#netnote{margin-top:8px;min-height:16px;color:#8fa6b4;font-size:12px;text-align:center}
+#netchip{cursor:pointer;letter-spacing:.08em}
+#netchip.live{color:#8ff0b0;border-color:#2f6b46}
+#netchip.warn{color:#ffc9a8;border-color:#7a4a2a}

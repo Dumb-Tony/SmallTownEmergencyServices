@@ -30,6 +30,9 @@ import { createDispatchState, stepDispatch, radio } from './sim/dispatch.js';
 import { stepPlayerMovement, stepApparatusMovement } from './sim/movement.js';
 import { stepInteraction } from './sim/interaction.js';
 import { buildShiftReport } from './ui/shiftReport.js';
+import {
+  encodeSnapshot, applySnapshot, encodeCommand, decodeCommand, EMPTY_COMMAND,
+} from './net/protocol.js';
 
 export const MODES = Object.freeze({
   TITLE: 'title', PLAYING: 'playing', PAUSED: 'paused', REPORT: 'report',
@@ -75,6 +78,8 @@ export function createInitialState({ seed, seedLabel, town }) {
     responders: [],
     player: null,
     coop: false,
+    /** Set by NetSession. `remoteCommands` is the whole of the host's inbox. */
+    net: { remoteCommands: {}, isClient: false },
 
     apparatus: [],
     apparatusDefs: APPARATUS_BY_ID,
@@ -196,6 +201,11 @@ export class Game {
 
   /** One real frame. The ONLY entry point that advances simulation time. */
   frame(realDeltaMs, input) {
+    /* A client does not simulate. Its town is whatever the host last said it was, and
+     * the moment it starts stepping on its own it begins disagreeing about whether a
+     * building burned down — which is the entire failure mode host authority exists to
+     * prevent. The guard lives HERE, at the one door into the simulation. */
+    if (this.state.net.isClient) { if (input) input.endStep(); return 0; }
     if (this.state.mode !== MODES.PLAYING) { if (input) input.endStep(); return 0; }
     return this.clock.advance(realDeltaMs, (stepMs) => this.step(stepMs, input));
   }
@@ -213,7 +223,14 @@ export class Game {
      * is a list" could quietly become "the truck moves twice as fast with two people
      * in it", so it is worth saying out loud. */
     for (const r of s.responders) {
-      const cmd = readCommand(input, r.prefix);
+      /* A remote responder is driven by the last command that arrived over the wire.
+       * It is the same object shape readCommand builds, so from here down the
+       * simulation cannot tell the difference between a partner on this keyboard and
+       * a partner on another continent — which is the reason every responder was
+       * routed through a command in the first place. */
+      const cmd = r.remote
+        ? (s.net.remoteCommands[r.id] || EMPTY_COMMAND)
+        : readCommand(input, r.prefix);
       if (r.inVehicleId) {
         const ap = s.apparatus.find((a) => a.id === r.inVehicleId);
         if (ap && ap.driverId === r.id) {
@@ -383,6 +400,34 @@ export class Game {
     }
   }
 
+  /* ── the network's whole surface on the simulation ──────────────────────
+   * Four methods, and none of them touch the step order. A host takes commands in and
+   * hands snapshots out; a client takes snapshots in and hands commands out. If this
+   * list ever grows a fifth entry that is not one of those four things, the authority
+   * model has sprung a leak.
+   */
+
+  /** Host: the latest intent from a remote player. Null clears it (they left). */
+  setRemoteCommand(responderId, wire) {
+    const s = this.state;
+    if (!wire) { delete s.net.remoteCommands[responderId]; return; }
+    s.net.remoteCommands[responderId] = decodeCommand(wire);
+  }
+
+  encodeNetSnapshot() { return encodeSnapshot(this.state); }
+  encodeNetCommand(cmd) { return encodeCommand(cmd); }
+
+  /** Client: adopt the host's town wholesale. The client never steps the simulation. */
+  applyNetSnapshot(snap) { return applySnapshot(this.state, snap); }
+
+  /** Bring a partner on (P, or a client connecting). Returns the new responder. */
+  addResponder() {
+    const on = toggleCoop(this.state);
+    return on ? this.state.responders[this.state.responders.length - 1] : null;
+  }
+
+  removeResponder() { return toggleCoop(this.state); }
+
   endShift() {
     const s = this.state;
     if (s.mode === MODES.REPORT) return;
@@ -423,7 +468,7 @@ function clamp01(v) { return Math.min(1, Math.max(0, v)); }
 /** One responder's intent for one step. `prefix` selects that responder's key set —
  *  the same shape a network client would send, which is the point of routing every
  *  responder through here rather than reading the keyboard in the movement code. */
-function readCommand(input, prefix = '') {
+export function readCommand(input, prefix = '') {
   const a = (name) => (prefix ? prefix + name[0].toUpperCase() + name.slice(1) : name);
   if (!input) {
     return { axis: { x: 0, y: 0 }, drive: { throttle: 0, steer: 0 }, aim: null, interact: false, drop: false, use: false, siren: false, slot: null };
@@ -459,6 +504,7 @@ export function toggleCoop(state) {
       if (ap.driverId === gone.id) ap.driverId = null;
       ap.passengerIds = ap.passengerIds.filter((id) => id !== gone.id);
     }
+    delete state.net.remoteCommands[gone.id];
     state.coop = false;
     return false;
   }

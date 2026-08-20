@@ -24,6 +24,10 @@ export class Hud {
     this.game = game;
     this.expanded = false;
     this.onStart = null;
+    this.onHost = null;
+    this.onJoin = null;
+    this.onLeaveNet = null;
+    this.netStatus = 'offline';
     this._lastRadioLen = -1;
     this.build();
   }
@@ -37,6 +41,7 @@ export class Hud {
         <div class="pill grow" id="confidence"><span class="label">Town</span>
           <span class="bar"><i></i></span><span class="word"></span></div>
         <div class="pill" id="vehicle"></div>
+        <div class="pill net" id="netchip" hidden></div>
       </div>
 
       <div id="calls">
@@ -69,6 +74,13 @@ export class Hud {
             <div class="coopkeys"><b>P</b> add a second volunteer — arrows, <b>RShift</b>, <b>/</b>, <b>.</b>, <b>,</b>, numpad</div>
           </div>
           <button id="startbtn">Start the shift</button>
+          <div id="netrow">
+            <button id="hostbtn" class="ghost">Play together</button>
+            <span class="or">or</span>
+            <input id="joincode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
+            <button id="joinbtn" class="ghost">Join</button>
+          </div>
+          <div id="netnote"></div>
         </div>
       </div>`;
 
@@ -85,10 +97,49 @@ export class Hud {
       slots: this.root.querySelector('#slots'),
       radio: this.root.querySelector('#radio'),
       overlay: this.root.querySelector('#overlay'),
+      netchip: this.root.querySelector('#netchip'),
+      netnote: this.root.querySelector('#netnote'),
+      joincode: this.root.querySelector('#joincode'),
     };
 
     this.root.querySelector('#startbtn').addEventListener('click', () => this.onStart && this.onStart());
+
+    const code = this.el.joincode;
+    code.addEventListener('input', () => { code.value = code.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+    this.root.querySelector('#hostbtn').addEventListener('click', () => this.onHost && this.onHost());
+    const join = () => this.onJoin && this.onJoin(code.value);
+    this.root.querySelector('#joinbtn').addEventListener('click', join);
+    code.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); e.stopPropagation(); });
+    // The room code is five characters and people read it off a screen to a friend, so
+    // one click to copy it beats squinting.
+    this.el.netchip.addEventListener('click', () => {
+      const c = (this.el.netchip.dataset.code || '');
+      if (c && navigator.clipboard) navigator.clipboard.writeText(c).catch(() => {});
+    });
   }
+
+  /**
+   * Net status, verbatim from the session. The HUD never decides what the connection
+   * is doing — it only says so, in the two places a player is looking: the title card
+   * while they are setting it up, and a top-bar chip once the shift is running.
+   */
+  setNetStatus(status, net) {
+    this.netStatus = status;
+    const online = net && net.online;
+    const chip = this.el.netchip;
+    chip.hidden = !online;
+    chip.dataset.code = (net && net.code) || '';
+    chip.textContent = net && net.code ? `${net.code} · ${status}` : status;
+    chip.classList.toggle('live', status === 'connected');
+    chip.classList.toggle('warn', /left|mismatch|error|unavailable|not|could not|taken/i.test(status));
+    if (this.el.netnote) {
+      this.el.netnote.textContent = status === 'offline' ? '' :
+        (net && net.code && !/connected/.test(status)
+          ? `Room ${net.code} — tell your friend to type it in. (${status})`
+          : status);
+    }
+  }
+
 
   toggleExpanded() { this.expanded = !this.expanded; this.el.callsBox.classList.toggle('expanded', this.expanded); }
 

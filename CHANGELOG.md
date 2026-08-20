@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-08-19 — Phase 5b: the network half of co-op
+
+- **Host-authoritative netcode.** One five-character room code, a direct WebRTC
+  connection through PeerJS, and no server of ours anywhere in it. The host's simulation
+  is the game; a client sends command intent every frame (76 B) and draws snapshots
+  twelve times a second (4.7 kB for a busy town, 55 kB/s). `Game.frame()` refuses to
+  advance on a client — the guard sits at the one door into the simulation, so the two
+  towns cannot diverge.
+- **A partner who drops is cleaned up after**: their tool is on the ground, their patient
+  is put down, no stale command keeps driving a responder that no longer exists.
+- `src/net/protocol.js` is the wire format with no transport near it; `src/net/net.js` is
+  the transport, behind an interface thin enough that `loopbackPair()` runs a whole
+  host+client session in one page. That is how `tools/m3-tests.js` gets 82 assertions out
+  of a network with no network.
+- **Two bugs the tests caught, both real**: a client that connected fast enough showed
+  "joining" after it had already connected, because the status was set after the hello
+  went out; and `broadcastRadio` sent a message the client had no handler for — deleted,
+  since the radio already crosses in snapshots.
+- `tools/boot-check.js` — 18 assertions that the page itself came up: no crash banner,
+  PeerJS loaded, the join UI built, the code box sanitised, and a live session attached
+  to the real page encoding the real town.
+
+
 ## 2026-08-18 — Phases 0–4 of the GDD MVP
 
 Built against `GDD.md` in one session. The GDD's phase gates are the section headings.
