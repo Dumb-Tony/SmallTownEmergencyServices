@@ -437,7 +437,39 @@ export function reportCard(r) {
       <div><b>Driving</b><br>${(r.telemetry.distanceDrivenM / 1000).toFixed(1)} km · ${Math.round(r.telemetry.litresUsed)} L of water</div>
       <div><b>First split decision</b><br>${r.telemetry.firstSplitMs == null ? 'never split' : GameClock.formatMs(r.telemetry.firstSplitMs)}</div>
     </div>
-    <p class="dim">Damage and broken hydrants carry into the next shift.</p>
+    ${nextShiftBlock(r)}
     <button id="startbtn">Start shift ${r.shiftNumber + 1}</button>
   </div>`;
+}
+
+/**
+ * What the next shift inherits, named.
+ *
+ * The card used to end on "damage and broken hydrants carry into the next shift", which
+ * is a promise rather than evidence. GDD Phase 4's gate is that a player cares about a
+ * previous mistake — so the mistakes get names, and the last few shifts' headlines sit
+ * underneath them, because a run of them is the story the town is telling about you.
+ */
+function nextShiftBlock(r) {
+  const n = r.nextShift;
+  if (!n) return '';
+  const bits = [];
+  if (n.boarded.length) {
+    bits.push(`<b>Boarded up:</b> ${n.boarded.map((d) =>
+      `${d.name}${d.boardedShifts > 0 ? ` (${d.boardedShifts} more shift${d.boardedShifts === 1 ? '' : 's'})` : ''}`)
+      .join(', ')}`);
+  }
+  if (n.stillDamaged.length) {
+    bits.push(`<b>Still being patched up:</b> ${n.stillDamaged
+      .map((d) => `${d.name} ${Math.round(d.damage * 100)}%`).join(', ')}`);
+  }
+  if (n.hydrantsOut) bits.push(`<b>Out of service:</b> ${n.hydrantsOut} hydrant${n.hydrantsOut === 1 ? '' : 's'}`);
+  if (!bits.length) bits.push('Nothing carries over. The town is whole.');
+
+  const past = n.history.length > 1
+    ? `<div class="pastshifts">${n.history.slice(0, -1).map((h) => `<span>${h}</span>`).join('')}</div>`
+    : '';
+
+  return `<div class="nextshift"><h2>Shift ${r.shiftNumber + 1} starts here</h2>
+    ${bits.map((b) => `<p>${b}</p>`).join('')}${past}</div>`;
 }

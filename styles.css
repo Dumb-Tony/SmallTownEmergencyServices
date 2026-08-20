@@ -323,3 +323,21 @@ kbd {
   background: #0b1218; border: 1px solid #38505f; color: #cfe6f4;
   padding: 8px 10px; border-radius: 7px; font: 500 12px/1.2 ui-monospace, Consolas, monospace;
 }
+
+/* ── what the next shift inherits ──────────────────────────────────────────
+   The report used to end on a promise ("damage carries into the next shift"); this is
+   the evidence. Set apart from the shift's own numbers because it is about the future,
+   not the past. */
+.report .nextshift {
+  margin: 14px 0 4px; padding: 12px 14px;
+  background: rgba(40,32,22,0.55); border: 1px solid #5a4a32; border-left: 3px solid var(--amber);
+  border-radius: 8px;
+}
+.report .nextshift h2 {
+  margin: 0 0 6px; font-size: 12px; letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--amber); font-weight: 700;
+}
+.report .nextshift p { margin: 3px 0; font-size: 13px; color: #ece2cf; }
+.report .nextshift b { color: #fff3d8; font-weight: 700; }
+.report .pastshifts { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.report .pastshifts span { font-size: 11.5px; color: var(--dim); font-style: italic; }

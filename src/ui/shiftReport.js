@@ -51,6 +51,22 @@ export function buildShiftReport(state) {
     apparatus: state.apparatus.map((a) => ({
       name: a.name, damage: a.damage, km: a.odometerM / 1000, waterL: Math.round(a.waterL),
     })),
+
+    /* The town you will walk back into.
+     *
+     * The card used to end on the sentence "damage and broken hydrants carry into the
+     * next shift" — a claim with nothing behind it. Phase 4's gate is that a player
+     * cares about a previous mistake, and a mistake nobody is shown is a mistake nobody
+     * can care about. These are the consequences, named, at the moment they are handed
+     * over. */
+    nextShift: {
+      boarded: damaged
+        .map((d) => ({ ...d, boardedShifts: (state.town.buildings[d.id] || {}).boardedShifts || 0 }))
+        .filter((d) => d.boardedShifts > 0 || d.damage >= 0.6),
+      stillDamaged: damaged.filter((d) => d.damage > 0.02 && d.damage < 0.6),
+      hydrantsOut: brokenHydrants.length,
+      history: (state.town.history || []).slice(-3),
+    },
   };
 
   report.headline = headlineFor(report, damaged, state.outcome.structuresLostNames || []);

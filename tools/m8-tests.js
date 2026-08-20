@@ -18,6 +18,7 @@ import { CONFIG } from '../src/config.js';
 import { Game } from '../src/game.js';
 import { clearSave, loadTown, defaultTown, advanceShift } from '../src/core/persistence.js';
 import { buildShiftReport } from '../src/ui/shiftReport.js';
+import { reportCard } from '../src/ui/hud.js';
 import { CrewBot } from './_crewbot.js';
 import { BUILDINGS } from '../src/data/town.js';
 
@@ -190,8 +191,53 @@ lines.push('--- D. three shifts in the same town ---');
   lt('D9 while still being plainly worse off', ignored.town.confidence, CONFIG.town.startConfidence);
 }
 
+/* ── E. the report hands the town over ───────────────────────────────────── */
+function sectionE() {
+lines.push('--- E. what the next shift inherits, named ---');
+  clearSave();
+  const g = new Game({ seed: 4300 });
+  g.startShift();
+  const s = g.state;
+
+  const gutted = BUILDINGS.find((b) => b.kind === 'shop');
+  const dented = BUILDINGS.find((b) => b.kind === 'civic');
+  s.town.buildings[gutted.id] = { damage: 0.92, boardedShifts: 2, timesBurned: 1 };
+  s.town.buildings[dented.id] = { damage: 0.2, boardedShifts: 0, timesBurned: 1 };
+  s.town.hydrants.hyd_main_w = { damaged: true };
+  s.town.history = ['an older shift', 'the last shift'];
+
+  const r = buildShiftReport(s);
+  ok('E1 the report says what the next shift inherits', !!r.nextShift);
+  ok('E2 a gutted building is named, not counted',
+    r.nextShift.boarded.some((b) => b.name === gutted.name), JSON.stringify(r.nextShift.boarded));
+  eq('E3 with how long it stays boarded', r.nextShift.boarded[0].boardedShifts, 2);
+  ok('E4 a dented one is listed separately as still being patched up',
+    r.nextShift.stillDamaged.some((b) => b.name === dented.name));
+  ok('E5 a building cannot be in both lists',
+    !r.nextShift.boarded.some((b) => r.nextShift.stillDamaged.some((c) => c.id === b.id)));
+  eq('E6 hydrants out of service are counted', r.nextShift.hydrantsOut, 1);
+  ok('E7 and the last few shifts are there to read', r.nextShift.history.length >= 2);
+
+  /* The card is what the player actually sees, so assert the markup as well as the
+     data: a block that computes correctly and renders nothing is not a feature. */
+  const html = reportCard(r);
+  ok('E8 the card renders the carry-over block', html.includes('nextshift'));
+  ok('E9 with the building named in it', html.includes(gutted.name));
+  ok('E10 and it no longer just promises that damage carries over',
+    !html.includes('Damage and broken hydrants carry into the next shift'));
+
+  clearSave();
+  const clean = new Game({ seed: 4301 });
+  clean.startShift();
+  const cleanReport = buildShiftReport(clean.state);
+  eq('E11 a town with nothing wrong with it inherits nothing', cleanReport.nextShift.boarded.length, 0);
+  ok('E12 and the card says so rather than showing an empty box',
+    reportCard(cleanReport).includes('The town is whole'));
+}
+
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
+  sectionE(); emit(null);
   sectionA(); emit(null);
   sectionB(); emit(null);
   sectionC(); emit(null);

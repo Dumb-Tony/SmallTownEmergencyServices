@@ -56,6 +56,22 @@ try {
   box.dispatchEvent(new Event('input'));
   eq('the code box sanitises what is typed into it', box.value, 'AB3X');
 
+  lines.push('--- what a pasted link looks like ---');
+  const meta = (sel) => { const m = document.querySelector(sel); return m ? m.content : null; };
+  ok('the page describes itself', (meta('meta[name="description"]') || '').length > 60);
+  ok('a pasted link has a title', !!meta('meta[property="og:title"]'));
+  ok('and a description', (meta('meta[property="og:description"]') || '').length > 40);
+  const img = meta('meta[property="og:image"]') || '';
+  ok('and a picture', /^https:\/\/.+\.png$/.test(img), img);
+  ok('the picture is an ABSOLUTE url — a relative one previews as nothing',
+    img.startsWith('https://'), img);
+  eq('sized so it is not cropped to a stripe', meta('meta[property="og:image:width"]'), '1200');
+  ok('the picture has alt text', (meta('meta[property="og:image:alt"]') || '').length > 20);
+  eq('and it renders large rather than as a thumbnail', meta('meta[name="twitter:card"]'), 'summary_large_image');
+  const icon = document.querySelector('link[rel="icon"]');
+  ok('there is a real favicon, not a blank one',
+    !!icon && icon.href.startsWith('data:image/svg+xml') && icon.href.length > 80);
+
   lines.push('--- the invitation ---');
   ok('the share row is out of the way until there is a room', q('#sharerow').hidden);
   S.hud.setShareUrl('https://example.test/#room=ABCDE');
