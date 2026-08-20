@@ -300,3 +300,16 @@ kbd {
   #overlay .keys { display: none; }     /* the controls ARE on screen on a phone */
   #netrow { flex-wrap: wrap; }
 }
+
+/* ── the coach ─────────────────────────────────────────────────────────────
+   One line, in the place the player is already looking, never a modal. Distinct enough
+   to be read at a glance and quiet enough to ignore, because the town does not stop
+   while it is on screen. */
+#coach {
+  background: rgba(28,40,30,0.9); border: 1px solid #3f6b48; border-left: 3px solid var(--lime);
+  border-radius: 8px; padding: 7px 12px; font-size: 13px; color: #e7f6df;
+  max-width: 62ch; line-height: 1.35;
+}
+@media (max-width: 700px), (max-height: 480px) {
+  #coach { font-size: 11px; padding: 5px 8px; max-width: 46vw; }
+}

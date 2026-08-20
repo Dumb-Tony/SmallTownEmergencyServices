@@ -22,6 +22,9 @@ export function defaultTown() {
     buildings: {},     // id -> { damage, boardedShifts, timesBurned }
     hydrants: {},      // id -> { damaged }
     history: [],       // one line per completed shift, newest last
+    // Which of the five verbs this player has performed at least once. The coach reads
+    // it to know when to stop talking; a save from before it existed simply has none.
+    learned: {},
   };
 }
 
@@ -61,6 +64,9 @@ export function migrate(data) {
     buildings: sanitiseBuildings(data.buildings),
     hydrants: sanitiseHydrants(data.hydrants),
     history: Array.isArray(data.history) ? data.history.slice(-12) : [],
+    // Only the known lesson names survive a load, so a corrupt save cannot silence the
+    // coach with junk keys — and an old save, which has none, simply starts learning.
+    learned: sanitiseLearned(data.learned),
   };
 }
 
@@ -142,4 +148,11 @@ export function advanceShift(town, summary) {
   }
 
   return next;
+}
+
+function sanitiseLearned(obj) {
+  const out = {};
+  if (!obj || typeof obj !== 'object') return out;
+  for (const k of CONFIG.coach.lessons) if (obj[k] === true) out[k] = true;
+  return out;
 }

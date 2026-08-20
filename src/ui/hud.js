@@ -51,6 +51,7 @@ export class Hud {
       </div>
 
       <div id="bottom">
+        <div id="coach" hidden></div>
         <div id="prompt"></div>
         <div id="slots"></div>
       </div>
@@ -95,6 +96,7 @@ export class Hud {
       calls: this.root.querySelector('#calls ul'),
       callsBox: this.root.querySelector('#calls'),
       prompt: this.root.querySelector('#prompt'),
+      coach: this.root.querySelector('#coach'),
       slots: this.root.querySelector('#slots'),
       radio: this.root.querySelector('#radio'),
       overlay: this.root.querySelector('#overlay'),
@@ -141,6 +143,31 @@ export class Hud {
     }
   }
 
+
+  /**
+   * One line of guidance from src/ui/coach.js, or null.
+   *
+   * A hint that changed every frame would be unreadable, so a line stays put for
+   * CONFIG.coach.minShowMs before a different one may replace it — except when the
+   * coach falls silent, which happens the instant the player does the thing and should
+   * be immediate. Nothing here pauses anything; the town keeps running behind it.
+   */
+  setHint(hint) {
+    const el = this.el.coach;
+    if (!el) return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    if (!hint) {
+      this._hintId = null;
+      el.hidden = true;
+      return;
+    }
+    if (this._hintId === hint.id) { el.textContent = hint.text; return; }
+    if (this._hintId && now - (this._hintAtMs || 0) < CONFIG.coach.minShowMs) return;
+    this._hintId = hint.id;
+    this._hintAtMs = now;
+    el.hidden = false;
+    el.textContent = hint.text;
+  }
 
   toggleExpanded() { this.expanded = !this.expanded; this.el.callsBox.classList.toggle('expanded', this.expanded); }
 

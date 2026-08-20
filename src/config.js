@@ -166,6 +166,16 @@ export const CONFIG = {
     declineLiveMul: 1.7,
   },
 
+  /* ── the coach (src/ui/coach.js) ───────────────────────────────────────── */
+  coach: {
+    /* The five verbs, in the order a first shift teaches them. Lives here rather than in
+       src/ui/coach.js so that persistence can sanitise a save without core/ having to
+       import from ui/. */
+    lessons: ['ride', 'drive', 'equip', 'use', 'arrive'],
+    driveLearnedM: 60,     // half a block: enough to have understood the throttle
+    minShowMs: 2600,       // a line stays put long enough to be read, then may change
+  },
+
   /* ── tools ──────────────────────────────────────────────────────────────── */
   tools: {
     chainsawCutPerSec: 0.16,   // ~6 s of cutting per tree section

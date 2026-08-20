@@ -19,6 +19,8 @@ import { DebugOverlay } from './dev/debugOverlay.js';
 import { GameAudio } from './audio/audio.js';
 import { NetSession, ROLE } from './net/net.js';
 import { TouchControls, looksLikeTouch } from './ui/touch.js';
+import { nextHint, learnFromEvent, learnFromDistance } from './ui/coach.js';
+import { saveTown } from './core/persistence.js';
 import { WORLD } from './data/town.js';
 
 const canvas = document.getElementById('stage');
@@ -55,6 +57,14 @@ const armAudio = () => { audio.arm(); audio.resume(); };
 window.addEventListener('keydown', armAudio, { once: true });
 window.addEventListener('pointerdown', armAudio, { once: true });
 game.bus.onAny((evt) => audio.onEvent(evt.type, evt, evt.simTimeMs));
+
+/* The coach retires a lesson the first time the player DOES the thing, not after a
+   timer or a click, and the flags live in the town save so shift three is quiet. */
+game.bus.onAny((evt) => {
+  if (game.state.town && learnFromEvent(game.state.town.learned || (game.state.town.learned = {}), evt.type)) {
+    saveTown(game.state.town);
+  }
+});
 
 /* Alt-tabbing out of a live town and coming back to three lost calls is a bug report,
    not a difficulty setting. */
@@ -165,6 +175,12 @@ function frame(now) {
   // authority over the simulation than the pixels have. A paused town is a silent one.
   if (game.state.mode === MODES.PLAYING) audio.update(game.state, Math.min(dt, 100));
   else audio.hush();
+  /* Driving is learned by doing it: the odometer is already kept for the shift report. */
+  if (game.state.town && learnFromDistance(game.state.town.learned || {}, game.state.telemetry.distanceDrivenM)) {
+    saveTown(game.state.town);
+  }
+  hud.setHint(nextHint(game.state, { learned: game.state.town && game.state.town.learned, touch: touch.enabled }));
+
   hud.update();
   // the phone's equipment row mirrors the HUD's numbered slots: same list, same order
   if (touch.enabled) touch.setSlots(hud.lastSlots || []);

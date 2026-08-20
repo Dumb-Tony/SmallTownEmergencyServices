@@ -61,6 +61,20 @@ The second responder drives with the **arrows**, and uses `RShift` (interact), `
 are theirs alone — a control that does something different depending on who else is on
 shift is worse than no control.
 
+## Your first shift
+
+Nobody reads a manual for a game they were sent a link to, and GDD Phase 0's exit gate
+is "understandable without instructions after one attempt". So there is a coach: one
+line, in the place you are already looking, saying the next physical thing.
+
+![The coach naming the call, the truck and the key, while the town carries on](docs/m7-coach.png)
+
+It is not a tutorial. It never pauses anything, never asks you to press a key to
+continue, and if you ignore it and drive somewhere else the line changes to suit where
+you went — the call keeps deteriorating the whole time, which is the point. Each verb
+retires the first time you do it, and once you have done all five it never speaks again,
+on this shift or any later one.
+
 ## On a phone
 
 Open the link on a phone and the game builds a stick, four verb buttons and an equipment
@@ -201,6 +215,11 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
 - `tools/m1-tests.js` — the systems: fire spread and suppression, water supply, gas
   ignition chains, live lines, blockage, patients, dispatch pacing, incident lifecycle,
   and the GDD's signature-scenario acceptance test.
+- `tools/m7-tests.js` — the coach. What it says at each point of a response, that it
+  retires each lesson the first time the player does the thing, that a corrupt save
+  cannot silence it with invented lessons, and — the one that matters — that fifty hints
+  change nothing about the town and the call deteriorates while the player is being
+  coached.
 - `tools/m6-tests.js` — touch. That a thumb and a key are the same thing all the way
   down, that a tap cannot get stuck held, that the stick drives as well as walks, and
   that a phone gets a readable number of pixels per metre. `tools/_layoutdiag.js`
@@ -230,7 +249,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**529 assertions.**
+**564 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 

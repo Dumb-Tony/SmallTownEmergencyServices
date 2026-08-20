@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-08-20 — a first shift you can work out
+
+GDD Phase 0's exit gate — "driving across town is understandable without instructions
+after one attempt" — was the one gate nothing had ever been built for. The title card
+listed keys, and on a phone even that is now hidden under the player's thumbs.
+
+- **A coach: one line, read off the world.** Not a tutorial. `nextHint(state)` is a pure
+  function from the current state to at most one short line, shown in the prompt the
+  player is already reading. It names the call, the truck, the kit and why that kit —
+  "Hose line — it is burning. Press 3 to take it."
+- **It never blocks.** No modal, no pause, no "press E to continue". Implementation rule
+  3 forbids pausing an incident clock for a tutorial, and there is an assertion that the
+  call deteriorates while the player is being coached.
+- **It retires itself.** Each verb goes quiet the first time the player does it — from
+  the simulation's own events, not a timer or a click — and driving is learned by
+  driving half a block. The flags live in the town save, so shift three is silent.
+  A corrupt save cannot silence it with invented lessons.
+- It speaks in buttons on a phone and keys on a keyboard, off the same lines.
+
+Measured over a whole bot shift: the coach taught `wait, ride, drive, arrive, equip,
+use`, all five verbs were learned, and it went quiet well before the shift ended.
+
+`tools/m7-tests.js` — 35 assertions, 564 in total.
+
+
 ## 2026-08-20 — it plays on a phone
 
 The whole point of this project is a link you send to a friend, and half the people you
