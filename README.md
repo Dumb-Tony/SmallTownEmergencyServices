@@ -49,7 +49,7 @@ That starts a local http server (ports 8381–8390) and opens a tab. **You canno
 | `1`–`5` | take a numbered item from the nearest compartment, the apron rack, or the ground |
 | `F` | put down what you are holding |
 | `Q` | siren |
-| `TAB` | expand the call list · `ESC` pause · `F3` debug overlay |
+| `TAB` | expand the call list · `ESC` pause · `M` mute · `F3` debug overlay |
 
 Five verbs, as the GDD demands. Everything else is situation.
 
@@ -74,6 +74,22 @@ Things that are *systems*, not scripts, and therefore chain into each other:
 - a trunk across the lane genuinely blocks the lane, so the shortest route stops being the shortest route;
 - flattening a hydrant with the engine puts it out of service — this shift and the next.
 
+## Sound
+
+WebAudio, synthesised from nothing — no files, no fetches. `tone`, `makeNoise` and
+`arm` came from `Dev\SomethingsDifferent` per `Dev\INDEX.md`.
+
+It is the renderer's twin: it reads state, and owns none of it. Sirens carry, a fire is
+as loud as the cells actually burning and as near as they actually are, the engine note
+follows road speed, and a live wire crackles before you are close enough to be thrown
+by it.
+
+**The gas meter is the point.** Gas is the one hazard with nothing to look at, so the
+meter clicks faster the more of it there is — up to fourteen a second standing on the
+leak. That is the reason it is worth a hand.
+
+`M` mutes, and the setting sticks.
+
 ## Persistence
 
 One shift is the unit of persistence. Between shifts the town keeps building damage,
@@ -88,6 +104,7 @@ src/core/            rng · clock · eventBus · input · persistence
 src/data/            town.js (places) · incidents.js (call catalogue) · equipment.js
 src/sim/             hazards · victims · incidentSim · dispatch · movement · interaction
 src/render/          camera · renderer          (read state, never write it)
+src/audio/           audio.js  mixFor() is pure; the oscillators live behind it
 src/ui/              hud · shiftReport
 src/game.js          the authoritative simulation and the only step order
 src/main.js          bootstrap; the only mutable globals
@@ -120,7 +137,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**259 assertions.**
+**283 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 

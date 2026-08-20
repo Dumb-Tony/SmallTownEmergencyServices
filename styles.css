@@ -52,6 +52,8 @@ html, body {
 #confidence .bar i { display: block; height: 100%; background: var(--good); transition: width .3s; }
 #confidence .word { color: var(--dim); font-size: 12px; font-style: italic; }
 #vehicle { margin-left: auto; }
+.pill.mute { font-size: 10.5px; letter-spacing: 1.6px; color: var(--lime); min-width: 62px; justify-content: center; }
+.pill.mute.off { color: var(--dim); text-decoration: line-through; }
 
 .chip {
   background: rgba(255,255,255,0.07); border-radius: 5px;

@@ -87,3 +87,46 @@ same `wasPressed` edges, same numbered slot list the HUD renders — and
 - `tools/m2-tests.js` — 36 assertions (whole shifts on the real input path, the
   turning-up-beats-not-turning-up thesis, and soft-lock guards)
 - **259 assertions total.**
+
+## 2026-08-19 — audio
+
+WebAudio, synthesised from nothing: no files, no fetches, no dependencies. `tone`,
+`makeNoise` and `arm` copied from `SomethingsDifferent` per `Dev\INDEX.md` — that synth
+has now been written four times across the tree and this is the fourth *adaptation*,
+not a fifth invention.
+
+Two rules hold `src/audio/audio.js` together:
+
+- **Audio reads state and never writes it.** It is the renderer's twin — same input, a
+  different output device — and the simulation behaves identically with the whole layer
+  dead, which is exactly what happens on a browser that refuses a context.
+- **The decision is separate from the plumbing.** `mixFor(state)` is a pure function
+  from world state to target loudnesses; everything under it is oscillators. That split
+  is what makes the interesting half assertable on a headless box with no sound card.
+
+Continuous voices, all derived from state every frame rather than set by hand: siren
+(a real wail, and it carries 150 m), fire (loudness is burning cells each attenuated by
+its own distance, so a big fire far off and a small one at your feet can land on the
+same number — which is what they sound like), water, engine (pitch follows road speed),
+chainsaw, and the crackle of a live wire, which you now hear before you walk into it.
+
+**The gas meter is the reason this exists.** Gas is the one hazard with nothing to see,
+so the meter clicks at a rate that rises with concentration — up to fourteen a second at
+the leak. That is GDD rule 7, "make causes visible", in the only sense available for an
+invisible hazard, and it is why carrying the meter is worth a hand.
+
+One-shots live in a `CUES` table rather than a switch: a new event is a new row, and an
+event with no row is silent rather than fatal. Cues are rate-limited, and
+`APPARATUS_STRUCK` scales with impact — a kerb and a shop front are the same event with
+very different numbers behind them.
+
+`M` mutes, persisted to `stes.audio.v1`. Pausing hushes the town.
+
+### Test counts
+- `tools/m0-tests.js` section J — 24 assertions on the mix and the discipline: that a
+  siren is quieter across town, that a bigger fire is louder, that the meter's click
+  rate falls as you back away, that every cue names an event the simulation really
+  emits, and that thirty frames of audio leave the simulation byte-identical.
+- `tools/_audiodiag.js` — 12 assertions on the plumbing in a real browser: the context
+  builds, the voices exist and start silent, cues rate-limit, mute pulls the master down.
+- **283 assertions total.**

@@ -24,6 +24,8 @@ import {
 } from '../src/data/town.js';
 import { APPARATUS_DEFS, TOOL_DEFS, RACK_ITEMS } from '../src/data/equipment.js';
 import { stepPlayerMovement, stepApparatusMovement } from '../src/sim/movement.js';
+import { GameAudio, mixFor, atten, CUES } from '../src/audio/audio.js';
+import { createFire, createGas } from '../src/sim/hazards.js';
 
 /* ── harness ─────────────────────────────────────────────────────────────── */
 const lines = [];
@@ -35,6 +37,7 @@ function ok(name, cond, detail = '') {
 }
 const eq = (n, a, b) => ok(n, a === b, `got ${JSON.stringify(a)}, want ${JSON.stringify(b)}`);
 const near = (n, a, b, tol) => ok(n, Math.abs(a - b) <= tol, `got ${a}, want ${b} +/- ${tol}`);
+const gt = (n, a, b) => ok(n, a > b, `got ${a}, want > ${b}`);
 const STEP = CONFIG.sim.stepMs;
 
 let _pre = null;
@@ -404,10 +407,125 @@ lines.push('--- I. live simulation (time moves only through frame()) ---');
 emit(null);
 }
 
+/* ── J. audio ────────────────────────────────────────────────────────────── */
+function sectionJ() {
+lines.push('--- J. audio (the renderer\'s twin: reads state, owns nothing) ---');
+{
+  const g = new Game({ seed: 606, seedLabel: 'audio' });
+  g.startShift();
+  const s = g.state;
+  const a = new GameAudio();
+
+  // The harness has no user gesture, so this is the un-armed path — which is exactly
+  // the path a browser that refuses us a context takes, and it must be harmless.
+  ok('J1 audio starts un-armed', !a.armed);
+  let threw = false;
+  try { a.update(s, 16.7); a.onEvent('CALL_RECEIVED', {}, 0); a.hush(); } catch (e) { threw = true; }
+  ok('J2 update, events and hush are all safe before arming', !threw);
+  eq('J3 an un-armed update mixes nothing', a.update(s, 16.7), null);
+
+  // The rule that matters more than any sound in the game.
+  const before = JSON.stringify({
+    p: s.player, t: s.simTimeMs, inc: s.incidents.length, hz: s.hazards.length,
+    tools: s.tools.map((x) => [x.carrier, x.flowing]), town: s.town,
+  });
+  for (let i = 0; i < 30; i++) { mixFor(s); a.update(s, 16.7); }
+  const after = JSON.stringify({
+    p: s.player, t: s.simTimeMs, inc: s.incidents.length, hz: s.hazards.length,
+    tools: s.tools.map((x) => [x.carrier, x.flowing]), town: s.town,
+  });
+  ok('J4 audio never mutates the simulation', before === after);
+}
+{
+  // The mix is a pure function of state, so it is assertable with no sound card.
+  const g = new Game({ seed: 607, seedLabel: 'mix' });
+  g.startShift();
+  const s = g.state;
+
+  const quiet = mixFor(s);
+  ok('J5 a quiet town is silent', quiet.siren === 0 && quiet.fire === 0 &&
+    quiet.water === 0 && quiet.engine.gain === 0 && quiet.gasRate === 0);
+
+  const eng = s.apparatus.find((a) => a.id === 'engine');
+  eng.siren = true;
+  s.player.x = eng.x; s.player.y = eng.y;
+  gt('J6 a siren at your elbow is loud', mixFor(s).siren, 0.9);
+  s.player.x = eng.x + 120; s.player.y = eng.y;
+  const far = mixFor(s).siren;
+  ok('J7 and quieter across town, but still audible', far > 0 && far < 0.2, `${far.toFixed(3)}`);
+  s.player.x = eng.x + 400;
+  eq('J8 and silent past its range', mixFor(s).siren, 0);
+  eng.siren = false;
+
+  // fire: loudness follows burning cells AND distance, the same two facts the fire has
+  const fire = createFire('pizza', { seedCells: 4, heat: 1.0, from: 'centre' });
+  s.hazards.push(fire);
+  const hot = fire.cells.find((c) => c.burning);
+  s.player.x = hot.x; s.player.y = hot.y;
+  const near = mixFor(s).fire;
+  gt('J9 standing in a fire is loud', near, 0.2);
+  s.player.x = hot.x + 200; s.player.y = hot.y + 200;
+  eq('J10 a fire across town is inaudible', mixFor(s).fire, 0);
+  s.player.x = hot.x; s.player.y = hot.y;
+  for (const c of fire.cells) { c.burning = true; c.heat = 1; }
+  gt('J11 a bigger fire is louder than a smaller one', mixFor(s).fire, near);
+
+  // the gas meter: the whole reason this subsystem exists
+  const gas = createGas('hardware');
+  gas.ppm = 0.9;
+  s.hazards.push(gas);
+  s.player.x = gas.x; s.player.y = gas.y;
+  eq('J12 gas is silent with the wrong tool in your hands', mixFor(s).gasRate, 0);
+  const meter = s.tools.find((t) => t.defId === 'gasmeter');
+  meter.carrier = 'player'; s.player.toolId = meter.id;
+  const atLeak = mixFor(s).gasRate;
+  gt('J13 carrying the meter makes gas audible', atLeak, 1);
+  s.player.x = gas.x + 8;
+  const offToTheSide = mixFor(s).gasRate;
+  ok('J14 and the click rate falls as you back away', offToTheSide < atLeak && offToTheSide > 0,
+    `${atLeak.toFixed(1)} -> ${offToTheSide.toFixed(1)} clicks/s`);
+  meter.carrier = null; s.player.toolId = null;
+
+  // water and engine follow the same rule: they are readings, not flags set by hand
+  const hose = s.tools.find((t) => t.defId === 'hose');
+  hose.carrier = 'player'; s.player.toolId = hose.id;
+  eq('J15 a hose that is not flowing is silent', mixFor(s).water, 0);
+  hose.flowing = true;
+  gt('J16 an open nozzle is not', mixFor(s).water, 0.5);
+
+  s.player.inVehicleId = 'engine';
+  eng.speed = eng.speed || 0;
+  const idle = mixFor(s).engine;
+  eng.speed = s.apparatusDefs.engine.maxSpeed;
+  const flat = mixFor(s).engine;
+  ok('J17 the engine note rises with road speed',
+    flat.pitch > idle.pitch && flat.gain > idle.gain,
+    `idle ${idle.pitch.toFixed(2)} -> ${flat.pitch.toFixed(2)}`);
+}
+{
+  // every cue is a well-formed recipe, and every one names a real event
+  const names = Object.keys(CUES);
+  gt('J18 there is a cue vocabulary', names.length, 20);
+  ok('J19 every cue names an event the simulation actually emits',
+    names.every((n) => EVENTS[n] === n), names.filter((n) => EVENTS[n] !== n).join());
+  ok('J20 every cue is playable (bus, gap, and at least one partial)',
+    Object.values(CUES).every((c) => ['world', 'foley', 'ui'].includes(c.bus) &&
+      c.minGapMs >= 0 && c.parts.length > 0 &&
+      c.parts.every((p) => p.length >= 5 && p[2] > 0 && p[4] > 0)));
+
+  const a = new GameAudio();
+  ok('J21 mute persists through the store', a.setMuted(true) === true && new GameAudio().muted === true);
+  ok('J22 and unmutes again', a.setMuted(false) === false && new GameAudio().muted === false);
+  near('J23 attenuation is a squared falloff', atten(50, 100), 0.25, 0.001);
+  eq('J24 and clamps to silence at the edge', atten(120, 100), 0);
+}
+emit(null);
+}
+
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
   sectionA(); sectionB(); sectionC(); sectionD(); sectionE();
-  sectionF(); sectionG(); sectionH(); sectionI();
+  sectionF(); sectionG(); sectionH(); sectionI(); sectionJ();
 } catch (err) {
   fails++;
   lines.push(`FAIL  suite threw: ${err && err.message}`);

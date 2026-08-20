@@ -15,6 +15,7 @@ import { Camera } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
 import { Hud } from './ui/hud.js';
 import { DebugOverlay } from './dev/debugOverlay.js';
+import { GameAudio } from './audio/audio.js';
 import { WORLD } from './data/town.js';
 
 const canvas = document.getElementById('stage');
@@ -34,6 +35,16 @@ const renderer = new Renderer(canvas, camera);
 const input = new Input(window).attach();
 const hud = new Hud(uiRoot, game);
 const debug = new DebugOverlay(uiRoot, game, renderer);
+const audio = new GameAudio();
+
+/* A browser will not give out an AudioContext before a real gesture, so the layer stays
+   dead until one arrives — and must behave identically in that state, which is also the
+   state the headless harness runs in. Every simulation event goes through onEvent();
+   unknown ones are silent rather than fatal, so adding an event never breaks sound. */
+const armAudio = () => { audio.arm(); audio.resume(); };
+window.addEventListener('keydown', armAudio, { once: true });
+window.addEventListener('pointerdown', armAudio, { once: true });
+game.bus.onAny((evt) => audio.onEvent(evt.type, evt, evt.simTimeMs));
 
 /* Alt-tabbing out of a live town and coming back to three lost calls is a bug report,
    not a difficulty setting. */
@@ -50,6 +61,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'Tab') { e.preventDefault(); hud.toggleExpanded(); }
   if (e.code === 'KeyR' && game.state.mode === MODES.PAUSED) { e.preventDefault(); startShift(); }
+  if (e.code === 'KeyM') { e.preventDefault(); audio.toggleMute(); hud.setMuted(audio.muted); }
 });
 
 function startShift() {
@@ -58,6 +70,7 @@ function startShift() {
   camera.follow(game.state.player.x, game.state.player.y, 0);
 }
 hud.onStart = startShift;
+hud.setMuted(audio.muted);
 
 let last = performance.now();
 
@@ -83,6 +96,10 @@ function frame(now) {
   camera.follow(game.state.player.x, game.state.player.y, Math.min(dt, 100) / 1000);
 
   renderer.render(game.state, now);
+  // Audio is the renderer's twin: same state, a different output device, and no more
+  // authority over the simulation than the pixels have. A paused town is a silent one.
+  if (game.state.mode === MODES.PLAYING) audio.update(game.state, Math.min(dt, 100));
+  else audio.hush();
   hud.update();
   debug.update(dt);
 
@@ -92,4 +109,4 @@ requestAnimationFrame(frame);
 
 /* Test and debug handle. The smoke-test harness drives these real objects rather than
    reaching into module scope. */
-window.__STES = { game, camera, renderer, hud, debug, input, CONFIG, startShift, frame };
+window.__STES = { game, camera, renderer, hud, debug, input, audio, CONFIG, startShift, frame };

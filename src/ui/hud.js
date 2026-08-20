@@ -33,6 +33,7 @@ export class Hud {
       <div id="topbar">
         <div class="pill" id="clock">10:00</div>
         <div class="pill" id="shift">Shift 1</div>
+        <div class="pill mute" id="mute" title="M">SOUND</div>
         <div class="pill grow" id="confidence"><span class="label">Town</span>
           <span class="bar"><i></i></span><span class="word"></span></div>
         <div class="pill" id="vehicle"></div>
@@ -63,7 +64,8 @@ export class Hud {
             <div><b>1–5</b> take kit from the nearest truck</div>
             <div><b>F</b> put it down</div>
             <div><b>Q</b> siren</div>
-            <div><b>TAB</b> call detail &nbsp; <b>ESC</b> pause</div>
+            <div><b>TAB</b> call detail &nbsp; <b>ESC</b> pause &nbsp; <b>M</b> mute</div>
+            <div><b>mouse</b> aim what you are holding</div>
           </div>
           <button id="startbtn">Start the shift</button>
         </div>
@@ -72,6 +74,7 @@ export class Hud {
     this.el = {
       clock: this.root.querySelector('#clock'),
       shift: this.root.querySelector('#shift'),
+      mute: this.root.querySelector('#mute'),
       confBar: this.root.querySelector('#confidence .bar i'),
       confWord: this.root.querySelector('#confidence .word'),
       vehicle: this.root.querySelector('#vehicle'),
@@ -87,6 +90,15 @@ export class Hud {
   }
 
   toggleExpanded() { this.expanded = !this.expanded; this.el.callsBox.classList.toggle('expanded', this.expanded); }
+
+  /** Audio owns whether it is muted; the HUD only reports it. */
+  setMuted(muted) {
+    this.muted = !!muted;
+    if (this.el.mute) {
+      this.el.mute.textContent = this.muted ? 'MUTED' : 'SOUND';
+      this.el.mute.classList.toggle('off', this.muted);
+    }
+  }
 
   update() {
     const s = this.game.state;
