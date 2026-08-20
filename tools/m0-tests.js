@@ -14,13 +14,14 @@ import { GameClock } from '../src/core/clock.js';
 import { EventBus, EVENTS } from '../src/core/eventBus.js';
 import { Input, DEFAULT_BINDINGS } from '../src/core/input.js';
 import { mulberry32, Rng, hashStr } from '../src/core/rng.js';
-import { defaultTown, migrate, advanceShift, SAVE_VERSION } from '../src/core/persistence.js';
+import { defaultTown, migrate, advanceShift, SAVE_VERSION, clearSave } from '../src/core/persistence.js';
 import { Game, MODES, createInitialState } from '../src/game.js';
 import { CONFIG } from '../src/config.js';
 import {
   WORLD, BOUNDS, ROADS, BUILDINGS, HYDRANTS, POLES, STATION, CLINIC,
   TREE_SITES, CRASH_SITES, roadRects, roadAt, isOnRoad, buildingAt, describePlace,
   blockingRectAt, resolveCircleRect, circleHitsRect, rectsOverlap, dist, clampToBounds,
+  BUILDING_BY_ID,
 } from '../src/data/town.js';
 import { APPARATUS_DEFS, TOOL_DEFS, RACK_ITEMS } from '../src/data/equipment.js';
 import { stepPlayerMovement, stepApparatusMovement } from '../src/sim/movement.js';
@@ -365,6 +366,75 @@ lines.push('--- H. movement (structures stop trucks, not people) ---');
   ok('H14 a building stops an engine', struck !== null);
   ok('H15 and marks the panel', eng.damage > 0, `damage ${eng.damage.toFixed(3)}`);
   ok('H16 the engine did not end up inside the shop', !buildingAt(eng.x, eng.y));
+}
+
+/* How a truck FEELS, in numbers, so it cannot drift without somebody noticing. Every
+ * one of these was measured with tools\_drivediag.js before it was asserted. A town is
+ * only as small as its trucks are quick: when a rig accidentally started the engine on
+ * the grass beside Main Street it capped at 26 km/h, and the whole town felt twice as
+ * far away as it is. */
+{
+  const rig = (x, y, angle, apId = 'engine') => {
+    clearSave();
+    const g = new Game({ seed: 808 });
+    g.startShift();
+    const s = g.state;
+    s.dispatch.nextCallAtMs = Number.MAX_SAFE_INTEGER;
+    s.incidents.length = 0; s.hazards.length = 0;
+    const ap = s.apparatus.find((a) => a.id === apId);
+    ap.x = x; ap.y = y; ap.angle = angle; ap.speed = 0; ap.damage = 0;
+    ap.driverId = s.player.id; s.player.inVehicleId = ap.id;
+    return { g, s, ap, def: s.apparatusDefs[ap.defId] };
+  };
+  const pedal = (throttle, steer = 0) => ({
+    moveAxis: () => ({ x: 0, y: 0 }),
+    isDown: (a) => (a === 'moveUp' && throttle > 0) || (a === 'moveDown' && throttle < 0)
+      || (a === 'moveRight' && steer > 0) || (a === 'moveLeft' && steer < 0),
+    wasPressed: () => false, wasReleased: () => false, endStep: () => {}, pointerWorld: null,
+  });
+  const run = (r, input, until, capMs) => {
+    let ms = 0;
+    while (ms < capMs && !until(r.ap, ms)) { r.g.frame(STEP, input); ms += STEP; }
+    return ms / 1000;
+  };
+
+  const road = rig(30, 150, 0);                       // ON Main Street, not beside it
+  const t95 = run(road, pedal(1), (ap) => ap.speed >= road.def.maxSpeed * 0.95, 30000);
+  ok('H17 a truck gets going in seconds, not half a minute', t95 < 4, `${t95.toFixed(1)} s to 95%`);
+  near('H18 and reaches the speed its data sheet claims', road.ap.speed, road.def.maxSpeed, road.def.maxSpeed * 0.06);
+
+  const x0 = road.ap.x;
+  const tStop = run(road, pedal(-1), (ap) => ap.speed <= 0.4, 20000);
+  ok('H19 and stops from top speed in a truck-sized distance', road.ap.x - x0 < 16,
+    `${(road.ap.x - x0).toFixed(0)} m in ${tStop.toFixed(1)} s`);
+
+  const turn = rig(200, 150, 0);
+  run(turn, pedal(1), (ap) => ap.speed >= 7, 20000);
+  const a0 = turn.ap.angle;
+  const tTurn = run(turn, pedal(1, 1), (ap) => {
+    let d = ap.angle - a0;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d >= Math.PI / 2;
+  }, 20000);
+  ok('H20 a junction turn takes about a second and a half', tTurn > 0.6 && tTurn < 3,
+    `${tTurn.toFixed(1)} s`);
+
+  const grass = rig(30, 118, 0);
+  run(grass, pedal(1), (ap, ms) => ms >= 10000, 10000);
+  ok('H21 grass really is the decision it is meant to be',
+    grass.ap.speed < road.def.maxSpeed * (CONFIG.drive.offRoadMul + 0.06),
+    `${(grass.ap.speed * 3.6).toFixed(0)} km/h vs ${(road.def.maxSpeed * 3.6).toFixed(0)} on tarmac`);
+
+  /* Nothing traps the player: nose a truck into a wall at speed and reverse must free
+     it. A wedged appliance with a live call on the board is unrecoverable. */
+  const b = BUILDING_BY_ID.hardware;
+  const jam = rig(b.x + b.w / 2, b.y + b.h + 14, -Math.PI / 2);
+  run(jam, pedal(1), (ap) => dist(ap.x, ap.y, b.x + b.w / 2, b.y + b.h) < 4.5, 20000);
+  const stuck = { x: jam.ap.x, y: jam.ap.y };
+  const tFree = run(jam, pedal(-1), (ap) => dist(ap.x, ap.y, stuck.x, stuck.y) > 8, 20000);
+  ok('H22 a truck nosed into a building reverses out of it', tFree < 5, `${tFree.toFixed(1)} s`);
+  ok('H23 and is not inside the building afterwards', !buildingAt(jam.ap.x, jam.ap.y));
 }
 emit('running H');
 }

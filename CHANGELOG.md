@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-08-20 — driving, measured
+
+The bot logs a lot of collisions, so the handling model got a diagnostic
+(`tools/_drivediag.js`) before anybody touched it. It turned out to be fine, and the
+first alarming number was the measurement's own fault: a rig placed at y=159 — the pole
+line — put the engine on the GRASS beside Main Street, where it capped at 26 km/h and
+took over thirty seconds to get there. On the carriageway at y=150 the same truck does
+0–95% in 3.2 s and 58 km/h.
+
+Nothing was changed. What was added is the numbers, as assertions, so they cannot drift:
+
+| | engine | ambulance | rescue |
+|---|---|---|---|
+| 0 to 95% | 3.2 s | 3.0 s | 2.5 s |
+| top speed on tarmac | 58 km/h | 72 | 65 |
+| stop from top speed | 1.3 s / 11 m | 1.3 / 13 | 1.3 / 12 |
+| 90° at a junction | 1.7 s | 1.7 | 1.7 |
+| nosed into a wall, reversed clear | 1.9 s | 1.8 | 1.8 |
+
+Grass is 27 km/h against 61 on tarmac, so the off-road shortcut stays a decision. Damage
+to 100% costs 44% of top speed. m0 section H grew seven assertions for all of it,
+including the one that matters most — a truck nosed into a building must reverse out of
+it, because a wedged appliance with a live call on the board is unrecoverable.
+
+
 ## 2026-08-20 — a first shift you can work out
 
 GDD Phase 0's exit gate — "driving across town is understandable without instructions
