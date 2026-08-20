@@ -4,6 +4,8 @@ A cooperative-in-spirit (single-player for now) emergency-response sandbox in on
 continuous top-down town. Browser, Canvas 2D, ES modules, zero dependencies, no build
 step.
 
+**▶ Play it: https://dumb-tony.github.io/SmallTownEmergencyServices/**
+
 > **The town keeps going without you.**
 
 Calls arrive incomplete and keep arriving. They age, deteriorate, combine and reroute
@@ -21,6 +23,13 @@ See [GDD.md](GDD.md) for the design this is built against, and
 ![The shift report after ten minutes in which nobody responded to anything](docs/report.png)
 
 ## Running it
+
+Play the published build at
+**https://dumb-tony.github.io/SmallTownEmergencyServices/** — that is the link to send
+anyone. Pages serves `main` at the repo root, so `git push` **is** the deploy: there is
+no build step and no second repo.
+
+To run it locally while working on it:
 
 ```bash
 play.bat
