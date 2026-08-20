@@ -313,3 +313,13 @@ kbd {
 @media (max-width: 700px), (max-height: 480px) {
   #coach { font-size: 11px; padding: 5px 8px; max-width: 46vw; }
 }
+
+/* ── the invitation ────────────────────────────────────────────────────────
+   The host's own URL, with the room on the end of it. A link is what people actually
+   paste into a chat; a five-character code is what they have to read down a phone. */
+#sharerow { display: flex; gap: 8px; margin-top: 12px; justify-content: center; flex-wrap: wrap; }
+#shareurl {
+  flex: 1 1 260px; min-width: 0; max-width: 380px;
+  background: #0b1218; border: 1px solid #38505f; color: #cfe6f4;
+  padding: 8px 10px; border-radius: 7px; font: 500 12px/1.2 ui-monospace, Consolas, monospace;
+}

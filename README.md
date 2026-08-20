@@ -94,9 +94,10 @@ cab drives and the other rides, a tool in someone's hands cannot be taken out of
 and a casualty already being carried cannot be picked up twice. Whoever is driving is
 also the one holding everyone else hostage when they park badly, which is the point.
 
-Or play it over the internet. **Play together** on the title card opens a room and puts
-a five-character code in the top bar; the other person types that code into the box and
-presses **Join**. There is no server: it is a direct WebRTC connection, with a public
+Or play it over the internet. **Play together** on the title card opens a room and turns
+the address bar into the invitation — copy the link, paste it into a chat, and whoever
+opens it lands in your town. (There is still a five-character code in the top bar for
+saying out loud.) There is no server: it is a direct WebRTC connection, with a public
 broker used only to introduce the two browsers.
 
 The host's town is the game. A client sends what its keys are doing and draws what comes
@@ -249,7 +250,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**571 assertions.**
+**595 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 

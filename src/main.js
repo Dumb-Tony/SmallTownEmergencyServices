@@ -18,6 +18,7 @@ import { Hud } from './ui/hud.js';
 import { DebugOverlay } from './dev/debugOverlay.js';
 import { GameAudio } from './audio/audio.js';
 import { NetSession, ROLE } from './net/net.js';
+import { roomFromUrl, shareUrl } from './net/link.js';
 import { TouchControls, looksLikeTouch } from './ui/touch.js';
 import { nextHint, learnFromEvent, learnFromDistance } from './ui/coach.js';
 import { saveTown } from './core/persistence.js';
@@ -101,7 +102,15 @@ function startShift() {
 hud.onHost = () => {
   audio.arm();
   if (game.state.mode === MODES.TITLE) startShift();
-  net.hostPeer();
+  const code = net.hostPeer();
+  /* The host's address bar becomes the invitation. Putting the room in the URL means
+     the thing a player already knows how to do — copy the link, paste it in a chat — is
+     the thing that invites somebody, instead of reading five characters down a phone. */
+  if (code) {
+    const url = shareUrl(location.href, code);
+    try { history.replaceState(null, '', `#room=${code}`); } catch (e) { /* file://, older browsers */ }
+    hud.setShareUrl(url);
+  }
   hud.setNetStatus(net.status, net);
 };
 hud.onJoin = (code) => {
@@ -109,7 +118,22 @@ hud.onJoin = (code) => {
   net.joinPeer(code);
   hud.setNetStatus(net.status, net);
 };
-hud.onLeaveNet = () => { net.leave(); hud.setNetStatus(net.status, net); };
+hud.onLeaveNet = () => {
+  net.leave();
+  hud.setShareUrl(null);
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
+  hud.setNetStatus(net.status, net);
+};
+
+/* Somebody opened an invitation. Fill the box, say so, and join — the tap that opened
+   the link IS the intent, and making them press a second button to honour it is the
+   kind of friction that ends with "it didn't work". */
+const invited = roomFromUrl(location.href);
+if (invited) {
+  hud.setInvitedCode(invited);
+  net.joinPeer(invited);
+  hud.setNetStatus(net.status, net);
+}
 hud.onStart = startShift;
 hud.setMuted(audio.muted);
 

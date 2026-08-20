@@ -19,6 +19,7 @@ import {
   encodeCommand, decodeCommand, packCells, unpackCells, EMPTY_COMMAND,
 } from '../src/net/protocol.js';
 import { NetSession, ROLE, loopbackPair, randCode } from '../src/net/net.js';
+import { roomFromUrl, shareUrl } from '../src/net/link.js';
 import { createFire, createGas, createPower, createTree, createWreck } from '../src/sim/hazards.js';
 import { createVictim } from '../src/sim/victims.js';
 import { createIncident } from '../src/sim/incidentSim.js';
@@ -350,9 +351,40 @@ lines.push('--- E. what it costs to send ---');
 emit(null);
 }
 
+/* ── F. the invitation ───────────────────────────────────────────────────── */
+function sectionF() {
+lines.push('--- F. joining by link (a URL is input a stranger controls) ---');
+  const base = 'https://dumb-tony.github.io/SmallTownEmergencyServices/';
+  eq('F1 a room in the hash is read', roomFromUrl(base + '#room=ABCDE'), 'ABCDE');
+  eq('F2 and in the query', roomFromUrl(base + '?room=ABCDE'), 'ABCDE');
+  eq('F3 lower case is fine — people retype links', roomFromUrl(base + '#room=abcde'), 'ABCDE');
+  eq('F4 a plain link is not an invitation', roomFromUrl(base), null);
+  eq('F5 nor is nonsense', roomFromUrl('not a url at all'), null);
+  eq('F6 nor is an empty room', roomFromUrl(base + '#room='), null);
+
+  /* The code goes straight into a PeerJS peer id, so anything that is not a plausible
+     code has to be refused rather than passed along. */
+  eq('F7 an over-long code is refused', roomFromUrl(base + '#room=ABCDEFGHIJKLMNOP'), null);
+  eq('F8 so are characters that are not in the alphabet', roomFromUrl(base + '#room=AB!DE'), null);
+  eq('F9 including the ones deliberately left out of it', roomFromUrl(base + '#room=ABCD0'), null);
+  eq('F10 and a path traversal dressed as a room', roomFromUrl(base + '#room=../../etc'), null);
+  eq('F11 and script, encoded or not',
+    roomFromUrl(base + '#room=%3Cscript%3Ealert(1)%3C/script%3E'), null);
+
+  const url = shareUrl(base, 'ABCDE');
+  eq('F12 the invitation is this page plus the room', url, base + '#room=ABCDE');
+  eq('F13 and it round-trips', roomFromUrl(url), 'ABCDE');
+  eq('F14 hosting twice replaces the room, never stacks two',
+    shareUrl(base + '#room=OLDXX', 'NEWYY'), base + '#room=NEWYY');
+  eq('F15 an existing query survives', shareUrl(base + '?debug=1', 'ABCDE'), base + '?debug=1#room=ABCDE');
+  eq('F16 no code, no change', shareUrl(base, null), base);
+  eq('F17 no page, no link', shareUrl('', 'ABCDE'), '');
+}
+
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
-  sectionA(); sectionB(); sectionC(); sectionD(); sectionE();
+  sectionA(); sectionB(); sectionC(); sectionD(); sectionE(); sectionF();
+  emit(null);
 } catch (err) {
   fails++;
   lines.push(`FAIL  suite threw: ${err && err.message}`);

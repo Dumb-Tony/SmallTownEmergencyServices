@@ -82,6 +82,10 @@ export class Hud {
             <input id="joincode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
             <button id="joinbtn" class="ghost">Join</button>
           </div>
+          <div id="sharerow" hidden>
+            <input id="shareurl" readonly>
+            <button id="copybtn" class="ghost">Copy link</button>
+          </div>
           <div id="netnote"></div>
         </div>
       </div>`;
@@ -103,6 +107,8 @@ export class Hud {
       netchip: this.root.querySelector('#netchip'),
       netnote: this.root.querySelector('#netnote'),
       joincode: this.root.querySelector('#joincode'),
+      sharerow: this.root.querySelector('#sharerow'),
+      shareurl: this.root.querySelector('#shareurl'),
     };
 
     this.root.querySelector('#startbtn').addEventListener('click', () => this.onStart && this.onStart());
@@ -119,6 +125,38 @@ export class Hud {
       const c = (this.el.netchip.dataset.code || '');
       if (c && navigator.clipboard) navigator.clipboard.writeText(c).catch(() => {});
     });
+
+    /* Copying the LINK, not the code. Clipboard access can be refused — an insecure
+       origin, a browser that says no — so the fallback is to select the text, which is
+       the thing the player was going to do by hand anyway. */
+    const copy = this.root.querySelector('#copybtn');
+    copy.addEventListener('click', () => {
+      const url = this.el.shareurl.value;
+      this.el.shareurl.select();
+      const done = () => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy link'; }, 1600); };
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => {});
+      else done();
+    });
+  }
+
+  /**
+   * Show the invitation: the host's own URL with the room on the end of it.
+   * Pass null to put the join row back.
+   */
+  setShareUrl(url) {
+    if (!this.el.sharerow) return;
+    this.el.sharerow.hidden = !url;
+    const row = this.root.querySelector('#netrow');
+    if (row) row.hidden = !!url;
+    if (url) this.el.shareurl.value = url;
+  }
+
+  /** A code that arrived in the URL: fill the box and say what is about to happen. */
+  setInvitedCode(code) {
+    if (!code || !this.el.joincode) return;
+    this.el.joincode.value = code;
+    const btn = this.root.querySelector('#joinbtn');
+    if (btn) btn.textContent = `Join ${code}`;
   }
 
   /**

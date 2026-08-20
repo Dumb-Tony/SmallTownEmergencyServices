@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-20 — the link is the invitation
+
+Co-op needed one person to read five characters down a phone while the other typed them
+in. What people actually do with a game is paste a link into a chat.
+
+- **Hosting puts the room on the host's own URL** and offers it to copy. Opening that
+  link fills the code in and joins — the tap that opened it is the intent, and asking
+  for a second button is how you get "it didn't work".
+- **A URL is input a stranger controls**, and the code goes straight into a PeerJS peer
+  id, so `roomFromUrl` refuses anything that is not a plausible code: too long, letters
+  deliberately left out of the alphabet, a path traversal, a script tag encoded or not.
+  Seventeen assertions on those two pure functions (`src/net/link.js`).
+- Hosting twice replaces the room rather than stacking two on the URL, an existing query
+  string survives, and leaving puts the plain link back.
+
+`tools/m3-tests.js` section F, and the boot check grew seven more on the share row.
+595 assertions in total.
+
+
 ## 2026-08-20 — driving, measured
 
 The bot logs a lot of collisions, so the handling model got a diagnostic

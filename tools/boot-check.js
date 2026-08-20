@@ -56,6 +56,18 @@ try {
   box.dispatchEvent(new Event('input'));
   eq('the code box sanitises what is typed into it', box.value, 'AB3X');
 
+  lines.push('--- the invitation ---');
+  ok('the share row is out of the way until there is a room', q('#sharerow').hidden);
+  S.hud.setShareUrl('https://example.test/#room=ABCDE');
+  ok('hosting shows a link to send', !q('#sharerow').hidden);
+  ok('with the room in it', /#room=ABCDE/.test(q('#shareurl').value));
+  ok('and the join row steps aside', q('#netrow').hidden);
+  S.hud.setShareUrl(null);
+  ok('leaving puts the join row back', !q('#netrow').hidden && q('#sharerow').hidden);
+  S.hud.setInvitedCode('PQRST');
+  eq('an invitation fills the code box for them', q('#joincode').value, 'PQRST');
+  ok('and the button says what it will do', /PQRST/.test(q('#joinbtn').textContent));
+
   lines.push('--- a real session, attached to the real page ---');
   const [hostLink, partnerLink] = loopbackPair();
   const heard = [];
