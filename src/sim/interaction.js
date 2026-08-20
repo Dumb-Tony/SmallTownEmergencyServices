@@ -22,21 +22,41 @@ export function heldTool(state) {
   return state.player.toolId ? state.tools.find((t) => t.id === state.player.toolId) : null;
 }
 
+/**
+ * Everything within arm's reach, in the order the HUD numbers it.
+ *
+ * GROUND FIRST, then the apron rack, then compartments — nearest first inside each
+ * group. Put a saw down at your feet and it is slot 1, because that is where a player
+ * looks for it. The first version listed compartments first, so the tool you had just
+ * dropped came sixth and could not be picked up at all beside a loaded truck.
+ */
 export function toolsInReachOf(state, x, y, radius = 3.6) {
-  const list = [];
-  for (const ap of state.apparatus) {
-    if (dist(x, y, ap.x, ap.y) > radius + 2.4) continue;
+  const ground = [];
+  for (const t of state.tools) {
+    if (t.carrier !== null) continue;
+    const d = dist(x, y, t.x, t.y);
+    if (d <= radius) ground.push({ tool: t, from: 'the ground', sourceId: null, d });
+  }
+
+  const rack = [];
+  if (dist(x, y, state.rack.x, state.rack.y) <= radius + 1.5) {
     for (const t of state.tools) {
-      if (t.carrier === ap.id) list.push({ tool: t, from: ap.name, sourceId: ap.id });
+      if (t.carrier === 'rack') rack.push({ tool: t, from: 'the apron rack', sourceId: 'rack', d: 0 });
     }
   }
-  if (dist(x, y, state.rack.x, state.rack.y) <= radius + 1.5) {
-    for (const t of state.tools) if (t.carrier === 'rack') list.push({ tool: t, from: 'the apron rack', sourceId: 'rack' });
+
+  const stowed = [];
+  for (const ap of state.apparatus) {
+    const d = dist(x, y, ap.x, ap.y);
+    if (d > radius + 2.4) continue;
+    for (const t of state.tools) {
+      if (t.carrier === ap.id) stowed.push({ tool: t, from: ap.name, sourceId: ap.id, d });
+    }
   }
-  for (const t of state.tools) {
-    if (t.carrier === null && dist(x, y, t.x, t.y) <= radius) list.push({ tool: t, from: 'the ground', sourceId: null });
-  }
-  return list;
+
+  ground.sort((a, b) => a.d - b.d);
+  stowed.sort((a, b) => a.d - b.d);
+  return [...ground, ...rack, ...stowed];
 }
 
 /** What E would do right now — the HUD prints this, so the prompt is never a guess. */

@@ -41,7 +41,11 @@ export const ROADS = [
  * possible there. `door` is where an on-foot responder is expected to work from.
  */
 export const BUILDINGS = [
-  { id: 'station',    name: 'Volunteer Station',   kind: 'station',  x: 72,  y: 164, w: 40, h: 28, fuel: 0.7, gas: true,  door: { x: 92,  y: 162 } },
+  // MEASURED: with the hall at y=164 the parked apparatus had 0.2 m between their
+  // back bumpers and their own front wall, so reversing out of the bay — the first
+  // thing anyone tries — put the engine nose-first into the station and wedged it
+  // there. Moved south to leave 6 m of apron behind the trucks.
+  { id: 'station',    name: 'Volunteer Station',   kind: 'station',  x: 72,  y: 170, w: 40, h: 28, fuel: 0.7, gas: true,  door: { x: 92,  y: 168 } },
   { id: 'pizza',      name: "Tony's Pizza",   kind: 'shop',     x: 130, y: 116, w: 24, h: 26, fuel: 1.0, gas: true,  door: { x: 142, y: 144 } },
   { id: 'hardware',   name: 'Grange Hardware',     kind: 'shop',     x: 176, y: 114, w: 32, h: 28, fuel: 1.1, gas: true,  door: { x: 192, y: 144 } },
   { id: 'church',     name: 'Riverside Church',    kind: 'civic',    x: 90,  y: 56,  w: 32, h: 26, fuel: 0.9, gas: false, door: { x: 106, y: 84 } },
@@ -62,7 +66,7 @@ export const CLINIC = { buildingId: 'clinic', x: 372, y: 116, radiusM: 13 };
 /** Apparatus bays and the walk-out point. GDD core loop step 1 starts here. */
 export const STATION = {
   buildingId: 'station',
-  apron: { x: 68, y: 154, w: 50, h: 10 },
+  apron: { x: 68, y: 154, w: 50, h: 16 },
   spawn: { x: 94, y: 158 },
   rack:  { x: 120, y: 159 },     // spare kit left on the apron between calls
   bays: [

@@ -50,3 +50,40 @@ Built against `GDD.md` in one session. The GDD's phase gates are the section hea
 ### Test counts
 - `tools/m0-tests.js` — 111 assertions (skeleton, geometry, persistence, movement, determinism)
 - `tools/m1-tests.js` — 112 assertions (systems, lifecycle, acceptance scenario)
+
+## 2026-08-19 — playability: a bot that actually plays it
+
+m0 and m1 drive the simulation through function calls, which cannot answer the question
+the GDD's phase gates really ask: can a person pressing keys get anything done?
+`tools/_crewbot.js` plays whole shifts through the real input path — same `moveAxis`,
+same `wasPressed` edges, same numbered slot list the HUD renders — and
+`tools/m2-tests.js` asserts on what it managed. It found nine things.
+
+### Game bugs it found (all fixed)
+1. **The apparatus could not reverse out of their own bays.** 0.2 m between back bumper
+   and station wall; reversing — the first thing anyone tries — wedged the engine
+   nose-first into the station. The hall moved 6 m south.
+2. **There were bearings a keyboard player could not point at.** Facing snaps to the
+   eight movement directions, 45° apart, and the water cone was ±20°. A crew could
+   stand in front of a burning farmhouse holding a charged line and be unable to fire
+   it. Cone widened to ±26° so the eight directions overlap.
+3. **Mouse aim was computed and thrown away.** `main.js` had maintained
+   `input.pointerWorld` since the first commit and nothing ever read it. Now threaded
+   through the command into facing, so the mouse aims exactly and the keyboard still works.
+4. **A tool at your feet was unreachable beside a loaded truck.** The slot list put
+   compartments first, so a just-dropped tool came sixth. Ground first now, nearest first.
+5. **Dead air after finishing a call** — 70 seconds of nothing, which the GDD forbids
+   outright. Gaps shortened, and the board going clear now pulls the next call forward.
+
+### Harness findings (bot fixes, but each was a real trap)
+6. Taking the hose off a parked engine and walking away silently anchors you 34 m from
+   the truck — working as designed, and now something the bot learns to avoid.
+7. Walking into a downed wire, being thrown clear, and walking straight back into it.
+8. Standing on top of the thing you are aiming at leaves facing undefined.
+9. Getting in and out of the same cab 5,290 times, which is now a failing assertion
+   rather than something you have to read a trace to notice.
+
+### Test counts
+- `tools/m2-tests.js` — 36 assertions (whole shifts on the real input path, the
+  turning-up-beats-not-turning-up thesis, and soft-lock guards)
+- **259 assertions total.**

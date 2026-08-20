@@ -33,9 +33,17 @@ export function stepDispatch(state, dtMs, rng) {
   // Nothing new in the last stretch of a shift: the crew should get to finish something.
   const tailMs = 70000;
   if (state.simTimeMs + tailMs > CONFIG.shift.durationMs) return out;
-  if (state.simTimeMs < d.nextCallAtMs) return out;
 
   const open = openIncidents(state).length;
+
+  // The board going clear pulls the next call forward. Checked here rather than only
+  // at scheduling time, because the silence that matters is the silence AFTER a crew
+  // finishes something, not the silence they were promised when the last call landed.
+  if (open === 0 && d.nextCallAtMs > state.simTimeMs + D.quietCapMs) {
+    d.nextCallAtMs = state.simTimeMs + D.quietCapMs;
+  }
+
+  if (state.simTimeMs < d.nextCallAtMs) return out;
   if (open >= D.maxActiveCalls) { d.nextCallAtMs = state.simTimeMs + 20000; return out; }
 
   const template = nextTemplate(state, rng);
@@ -57,7 +65,7 @@ export function stepDispatch(state, dtMs, rng) {
   // breathe than a crew standing on the apron. The queue still never empties.
   const load = Math.min(1, open / 3);
   const gap = rng.range(D.gapMinMs, D.gapMaxMs) * (0.75 + load * 0.55);
-  d.nextCallAtMs = state.simTimeMs + gap;
+  d.nextCallAtMs = state.simTimeMs + (open === 0 ? Math.min(gap, D.quietCapMs) : gap);
 
   out.push({ type: 'CALL_RECEIVED', incidentId: inc.id, priority: inc.priority, text: inc.report });
   return out;

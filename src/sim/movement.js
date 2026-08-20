@@ -18,9 +18,9 @@ import { hazardBlockAt, liveZoneAt } from './hazards.js';
 
 /**
  * @param {{x:number,y:number}} axis  normalised movement intent
- * @returns {Array<object>} events (shocks)
+ * @param {{x:number,y:number}|null} aim  world point the pointer is over, if any
  */
-export function stepPlayerMovement(state, axis, dtMs) {
+export function stepPlayerMovement(state, axis, dtMs, aim = null) {
   const p = state.player;
   const P = CONFIG.player;
   const dt = dtMs / 1000;
@@ -31,6 +31,14 @@ export function stepPlayerMovement(state, axis, dtMs) {
     axis = { x: 0, y: 0 };
   }
 
+  // Aim with the mouse if there is one. Without this the only facings available are
+  // the eight the movement keys can produce, which is a real constraint on where a
+  // stream can be pointed — see CONFIG.water.streamHalfAngleDeg.
+  if (aim) {
+    const dx = aim.x - p.x, dy = aim.y - p.y;
+    if (dx * dx + dy * dy > 0.09) p.facing = Math.atan2(dy, dx);
+  }
+
   const speedMul = (p.draggingVictimId ? P.carrySpeedMul : 1) *
                    (p.toolId && state.toolsById[p.toolId]?.twoHanded ? 0.88 : 1);
   const target = P.maxSpeed * speedMul;
@@ -38,7 +46,7 @@ export function stepPlayerMovement(state, axis, dtMs) {
   if (axis.x || axis.y) {
     p.vx += axis.x * P.accel * dt;
     p.vy += axis.y * P.accel * dt;
-    p.facing = Math.atan2(axis.y, axis.x);
+    if (!aim) p.facing = Math.atan2(axis.y, axis.x);
   } else {
     const s = Math.hypot(p.vx, p.vy);
     if (s > 0) {

@@ -72,7 +72,12 @@ export const CONFIG = {
   water: {
     nozzleFlowLps: 12,     // litres/second at the nozzle
     streamReachM: 8.5,
-    streamHalfAngleDeg: 20,   // +/- 3.4 m at full reach: aimable without being fiddly
+    // MEASURED: keyboard facing snaps to the eight movement directions, 45 deg apart,
+    // so a cone narrower than +/-22.5 deg leaves bearings a keyboard player physically
+    // cannot point at. At 20 deg the bot stood in front of a burning farmhouse holding
+    // a charged line for two minutes without ever being able to fire it. 26 gives the
+    // eight directions an overlap; the mouse aims exactly.
+    streamHalfAngleDeg: 26,
     hoseMaxLengthM: 34,    // park badly and the fire is simply out of reach
     hydrantHookupM: 7.0,   // how close the engine must be spotted to a hydrant
     hydrantSupplyLps: 22,  // refill rate once hooked up
@@ -153,8 +158,13 @@ export const CONFIG = {
   /* ── dispatch ───────────────────────────────────────────────────────────── */
   dispatch: {
     firstCallMs: 18000,
-    gapMinMs: 72000,
-    gapMaxMs: 150000,
+    gapMinMs: 55000,
+    gapMaxMs: 120000,
+    // A crew standing on the apron with nothing outstanding is the one state the GDD
+    // says the game must not have ("never drop into a mission-complete vacuum"). The
+    // bot's first successful shift closed its fire at 37 s and then had 70 seconds of
+    // silence; this caps how long the town can stay quiet once the board is clear.
+    quietCapMs: 30000,
     maxActiveCalls: 6,
     reportUpdateMinMs: 30000,
     reportUpdateMaxMs: 55000,

@@ -190,7 +190,7 @@ export class Game {
       s.telemetry.distanceDrivenM += ap.odometerM - before;
       s.telemetry.timeDrivingMs += stepMs;
     } else {
-      events.push(...stepPlayerMovement(s, cmd.axis, stepMs));
+      events.push(...stepPlayerMovement(s, cmd.axis, stepMs, cmd.aim));
       s.telemetry.timeOnFootMs += stepMs;
     }
 
@@ -389,7 +389,7 @@ function clamp01(v) { return Math.min(1, Math.max(0, v)); }
 
 function readCommand(input) {
   if (!input) {
-    return { axis: { x: 0, y: 0 }, drive: { throttle: 0, steer: 0 }, interact: false, drop: false, use: false, siren: false, slot: null };
+    return { axis: { x: 0, y: 0 }, drive: { throttle: 0, steer: 0 }, aim: null, interact: false, drop: false, use: false, siren: false, slot: null };
   }
   const axis = input.moveAxis();
   let slot = null;
@@ -400,6 +400,7 @@ function readCommand(input) {
       throttle: (input.isDown('moveUp') ? 1 : 0) - (input.isDown('moveDown') ? 1 : 0),
       steer: (input.isDown('moveRight') ? 1 : 0) - (input.isDown('moveLeft') ? 1 : 0),
     },
+    aim: input.pointerWorld || null,
     interact: input.wasPressed('interact'),
     drop: input.wasPressed('drop'),
     use: input.isDown('use'),

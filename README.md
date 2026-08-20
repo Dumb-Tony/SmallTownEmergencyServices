@@ -34,6 +34,7 @@ That starts a local http server (ports 8381–8390) and opens a tab. **You canno
 | Key | Does |
 |---|---|
 | `WASD` | walk · throttle, brake/reverse and steer in the cab |
+| mouse | aim what you are holding (the keyboard aims by the way you are facing) |
 | `E` | get in / get out · take hold of a patient · load them into the ambulance |
 | `SPACE` | use whatever is in your hands, on whatever is in front of you |
 | `1`–`5` | take a numbered item from the nearest compartment, the apron rack, or the ground |
@@ -104,6 +105,13 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
 - `tools/m1-tests.js` — the systems: fire spread and suppression, water supply, gas
   ignition chains, live lines, blockage, patients, dispatch pacing, incident lifecycle,
   and the GDD's signature-scenario acceptance test.
+- `tools/m2-tests.js` — playability. `tools/_crewbot.js` plays whole shifts through the
+  real input path: same `moveAxis`, same `wasPressed` edges, same numbered slot list the
+  HUD renders. It asserts the game's own thesis by running an idle control shift on the
+  same seed — a crew that turns up must close more calls, lose fewer, and let less of
+  the town burn than a crew that never leaves the station. It found nine bugs.
+
+**259 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 
