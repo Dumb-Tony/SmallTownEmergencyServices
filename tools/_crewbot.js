@@ -217,6 +217,7 @@ export class CrewBot {
     this.plannedApparatus = null;
     this.fetching = null;
     this.fetchingId = null;
+    this.ferryTo = null;
     this.sidestepMs = 0;
     this.sidestepSign = 1;
     this.actions = { toolsTaken: 0, patientsLoaded: 0, entries: 0, dismounts: 0 };
@@ -246,7 +247,18 @@ export class CrewBot {
 
     if (me(s, this).inVehicleId) {
       const riding = s.apparatus.find((a) => a.id === me(s, this).inVehicleId);
-      const target = this.fetching || inc;
+      /* A ferry outranks the call: the bot is driving the truck it has TO the truck it
+         needs. Walking that errand is what killed every trapped casualty — 200 m on foot
+         each way is longer than the 150 s a dose of the medkit buys them. */
+      const target = this.ferryTo || this.fetching || inc;
+      if (this.ferryTo && dist(riding.x, riding.y, this.ferryTo.x, this.ferryTo.y) < 14) {
+        if (Math.abs(riding.speed) > 1.2) { inp.hold('moveDown'); return inp; }
+        this.ferryTo = null;
+        inp.tap('interact');
+        this.actions.dismounts++;
+        this.note('out at the other truck');
+        return inp;
+      }
       if (this.drivingHopeless) {
         // Give up on driving for THIS call and walk it. Without the latch the bot got
         // out, saw it was not at the scene, got straight back in, and did that
@@ -279,6 +291,28 @@ export class CrewBot {
       // which is exactly what happened, for ninety seconds, on the way to the next call.
       const held = heldTool(s, me(s, this));
       if (held && held.defId === 'hose') { inp.tap('drop'); this.note('dropping the line'); return inp; }
+
+      /* Take the kit you will need where you are going.
+       *
+       * This is the GDD's third core-loop step — "choose apparatus AND equipment" — and
+       * it is the only way one person can win a trapped-casualty call. The spares live
+       * on the apron rack, and a tool in your hands is stowed in the cab when you climb
+       * in, so a medkit rides to the scene in the rescue truck and comes back out of its
+       * compartment on arrival. Without it the bot extricated at 31 s, drove back across
+       * town for the ambulance, and the casualty died at 185 s every single time: the
+       * round trip is longer than a trapped critical patient's 149 s of life.
+       */
+      if (!held && this.plannedApparatus !== 'ambulance' &&
+          incidentVictims(s, inc).some((v) => !victimHandled(v) && !v.lost)) {
+        const avail = toolsInReachOf(s, me(s, this).x, me(s, this).y);
+        const slot = avail.findIndex((a) => a.tool.defId === 'medkit');
+        if (slot >= 0 && slot < 5) {
+          inp.tap(`slot${slot + 1}`);
+          this.actions.toolsTaken++;
+          this.note('taking a medkit for the casualty');
+          return inp;
+        }
+      }
 
       let ap = s.apparatus.find((a) => a.id === this.plannedApparatus) || s.apparatus[0];
       const near = s.apparatus.slice().sort((a, b) =>
@@ -316,6 +350,19 @@ export class CrewBot {
     }
     // (Kit that is merely far is already handled below, by the forgotten-kit trip.)
     if (needsTruck) {
+      // Drive to it if there is something to drive. On foot at the scene with the truck
+      // you arrived in beside you, walking across town is never the right answer.
+      const mine = s.apparatus.slice()
+        .filter((a) => a.id !== needsTruck.id)
+        .sort((a, b) => dist(me(s, this).x, me(s, this).y, a.x, a.y) - dist(me(s, this).x, me(s, this).y, b.x, b.y))[0];
+      if (!this.ferryTo && mine &&
+          dist(me(s, this).x, me(s, this).y, needsTruck.x, needsTruck.y) > 60 &&
+          dist(me(s, this).x, me(s, this).y, mine.x, mine.y) < 22) {
+        this.ferryTo = { x: needsTruck.x, y: needsTruck.y };
+        this.note(`driving ${mine.name} over to ${needsTruck.name}`);
+        this.goToVehicle(s, mine);
+        return inp;
+      }
       if (this.fetchingId !== needsTruck.id) {
         this.note(`going back for ${needsTruck.name}`);
         this.fetchingId = needsTruck.id;

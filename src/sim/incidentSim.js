@@ -231,7 +231,11 @@ function hazardPressure(state, inc) {
   }
   for (const v of incidentVictims(state, inc)) {
     if (v.lost || v.delivered) continue;
-    p += (1 - v.condition) * 0.0030;
+    // Somebody who has been treated and is holding is not the same pressure on the town
+    // as somebody nobody has touched. Treatment buys time here too, not just on their
+    // own clock.
+    const stabilised = state.simTimeMs < v.stabilisedUntilMs;
+    p += (1 - v.condition) * 0.0030 * (stabilised ? 0.4 : 1);
     if (v.trappedBy) p += 0.0015;
   }
   return Math.min(CONFIG.dispatch.maxHazardPressure, p);
@@ -277,11 +281,24 @@ export function stepIncidents(state, dtMs, rng) {
     const hazardsClear = hazards.every((h) => h.resolved);
     const peopleClear = victims.every((v) => victimHandled(v));
 
-    /* danger — the deterioration curve */
+    /* danger — the deterioration curve
+     *
+     * The base rate is the situation getting worse ON ITS OWN, so it is heavily damped
+     * while somebody is actually stood in it. The central law is "the town keeps going
+     * WITHOUT you", not "the town fails on a timer while you work". Measured before
+     * this: a crew reached a farm entrapment at 16 s, extricated by 33 s, treated the
+     * casualty, and was driving back with the ambulance when the call was declared lost
+     * at 218 s — patient alive, conscious, stable, and the call failed anyway.
+     *
+     * Hazard pressure is NOT damped. A building that is still burning is still burning,
+     * so standing next to a fire without fighting it saves nothing.
+     */
     if (hazardsClear && peopleClear) {
       inc.danger = Math.max(0, inc.danger - 0.06 * dt);
     } else {
-      inc.danger = Math.min(1, inc.danger + (template.dangerPerSec + hazardPressure(state, inc)) * dt);
+      const attended = crewNear(state, inc);
+      const base = template.dangerPerSec * (attended ? CONFIG.dispatch.attendedDangerMul : 1);
+      inc.danger = Math.min(1, inc.danger + (base + hazardPressure(state, inc)) * dt);
       inc.peakDanger = Math.max(inc.peakDanger, inc.danger);
     }
 

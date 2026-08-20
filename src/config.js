@@ -187,6 +187,11 @@ export const CONFIG = {
     escalateHighAt: 0.34,      // danger thresholds for the priority stamp
     escalateCriticalAt: 0.66,
     lostAt: 1.0,
+
+    /* How much of a call's own deterioration clock still runs while a crew is stood in
+       it. The rest of the pressure comes from the hazards themselves, which are not
+       damped — see stepIncidents. */
+    attendedDangerMul: 0.25,
     // MEASURED: with the cap, the very worst neglected call (a template base of
     // 0.0035/s plus a fully-involved structure) reaches danger 1.0 in about 2 minutes,
     // and a routine tree down would need 16. Uncapped, a spreading fire wrote off its

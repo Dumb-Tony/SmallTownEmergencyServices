@@ -214,7 +214,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**480 assertions.**
+**487 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 

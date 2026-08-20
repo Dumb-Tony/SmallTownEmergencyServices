@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-08-20 — the medical family closes
+
+Following the previous milestone's measurement: medical calls were being worked 4 times
+out of 4 and controlled 0 times out of 4. Run one template at a time, the reason was
+different for each.
+
+- **`fall_outdoor` and `chest_pain` already worked** once a call could close on
+  packaging rather than handover — 23 s and 40 s respectively, one volunteer.
+- **`farm_entrapment` was failing on a timer that ignored the crew.** A call's danger
+  climbed at its full rate whether or not anybody was stood in it, so a crew that
+  reached a trapped casualty at 16 s, extricated by 33 s and treated them watched the
+  call declared lost at 218 s with the patient alive, conscious and stable. Deterioration
+  is what happens WITHOUT you — the central law says so — so the base rate is now damped
+  to a quarter while a crew is on scene. Hazard pressure is not damped: a building that
+  is still burning is still burning, and standing next to a fire saves nothing.
+- **A stabilised casualty puts less pressure on the town** than one nobody has touched.
+  Treatment buys time in both places now, not just on their own clock.
+- **The entrapment is a two-person call, and that is the design working.** It needs the
+  spreaders (rescue truck) and then the medkit and a ride (ambulance), and one person
+  cannot drive two trucks. Measured: solo it is lost at 383 s; with a partner it is
+  **controlled at 43 s** with the casualty alive and aboard. That is GDD Phase 5's exit
+  gate stated as a single call.
+- The crew bot learned the GDD's third core-loop step — choose apparatus **and
+  equipment**. It takes a spare medkit off the apron rack before rolling on a call with
+  casualties, because a tool in your hands is stowed in the cab when you climb in.
+
+`tools/m5-tests.js` grew a section for it (31 assertions, 487 in total), and
+`tools/_medcalldiag.js` is the per-template measurement. The playability baseline moved
+with it: whole bot shifts now close fire, crash AND medical calls, where they used to
+close fire and tree, and town confidence at the end of a worked shift went from 13%/29%
+to 48%/39%.
+
+
 ## 2026-08-20 — does it play?
 
 The GDD's build phases were all in, so the next milestone was the question Part II

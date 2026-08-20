@@ -28,6 +28,9 @@ import { createVictim, victimHandled, victimState } from '../src/sim/victims.js'
 import { createPower } from '../src/sim/hazards.js';
 import { CrewBot, makeBotInput, mergeBotInputs } from './_crewbot.js';
 import { POLES, dist } from '../src/data/town.js';
+import { createIncident, incidentVictims } from '../src/sim/incidentSim.js';
+import { TEMPLATE_BY_ID } from '../src/data/incidents.js';
+import { Rng } from '../src/core/rng.js';
 
 /* ── harness ─────────────────────────────────────────────────────────────── */
 const lines = [];
@@ -224,9 +227,59 @@ lines.push('--- D. two of you must be better than one of you (Phase 5 exit gate)
   ok('D6 and every shift still ran to the end', [...solo, ...pair].every((r) => r.controlled + r.lost > 0));
 }
 
+/* ── E. every medical template has a way to close ────────────────────────── */
+function oneCall(templateId, seed, crew) {
+  clearSave();
+  const g = new Game({ seed });
+  g.startShift();
+  const s = g.state;
+  s.dispatch.nextCallAtMs = Number.MAX_SAFE_INTEGER;    // this call and nothing else
+  const inc = createIncident(s, TEMPLATE_BY_ID[templateId], new Rng(seed));
+  if (crew === 2) toggleCoop(s);
+
+  const board = { claims: new Map(), trucks: new Map() };
+  const bots = s.responders.map((r) => new CrewBot(g, r.id, crew === 2 ? board : null));
+  bots.forEach((b, i) => { b.input = makeBotInput(i === 0 ? '' : 'p2'); });
+  const input = bots.length > 1 ? mergeBotInputs(bots.map((b) => b.input)) : bots[0].input;
+
+  for (let t = 0; t < CONFIG.shift.durationMs; t += STEP) {
+    for (const b of bots) b.think();
+    g.frame(STEP, input);
+    if (s.mode !== 'playing' || inc.status === 'controlled' || inc.status === 'lost') break;
+  }
+  return { status: inc.status, atS: Math.round(s.simTimeMs / 1000), victims: incidentVictims(s, inc) };
+}
+
+function sectionE() {
+lines.push('--- E. the five families include medicine, so medicine has to close ---');
+  const fall = oneCall('fall_outdoor', 11, 1);
+  eq('E1 a fall in the street is one person\'s job', fall.status, 'controlled');
+  lines.push(`      fall_outdoor: ${fall.status} at ${fall.atS}s, one volunteer`);
+
+  const chest = oneCall('chest_pain', 11, 1);
+  eq('E2 so is a chest pain inside a building', chest.status, 'controlled');
+  ok('E3 and that one ends with the patient in the back of the ambulance',
+    chest.victims.some((v) => v.inApparatusId || v.delivered));
+  lines.push(`      chest_pain:   ${chest.status} at ${chest.atS}s, one volunteer`);
+
+  /* The entrapment is the design's own answer to "why two players": it needs the
+     SPREADERS (rescue truck) and then the MEDKIT and a ride (ambulance), and one person
+     cannot drive two trucks. Solo it is lost; with a partner it closes in well under a
+     minute. That is Phase 5's exit gate stated as a single call. */
+  const soloTrap = oneCall('farm_entrapment', 11, 1);
+  const pairTrap = oneCall('farm_entrapment', 11, 2);
+  lines.push(`      farm_entrapment: solo ${soloTrap.status} at ${soloTrap.atS}s · ` +
+    `two crew ${pairTrap.status} at ${pairTrap.atS}s`);
+  eq('E4 a trapped critical casualty is more than one person can do', soloTrap.status, 'lost');
+  eq('E5 and exactly what two people can', pairTrap.status, 'controlled');
+  ok('E6 with the casualty alive and aboard', pairTrap.victims.every((v) => !v.lost) &&
+    pairTrap.victims.some((v) => v.inApparatusId || v.delivered));
+  gt('E7 and it is quick, once both trucks roll', 200, pairTrap.atS);
+}
+
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
-  sectionA(); sectionB(); sectionC(); sectionD();
+  sectionA(); sectionB(); sectionC(); sectionD(); sectionE();
   emit(null);
 } catch (err) {
   fails++;
