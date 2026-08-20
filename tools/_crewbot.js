@@ -27,32 +27,58 @@ import { victimHandled } from '../src/sim/victims.js';
  * exactly as the real one does, so the bot cannot accidentally use an analogue stick
  * the player does not have.
  */
-export function makeBotInput() {
+/** Which responder this bot is the hands of. */
+function me(state, bot) {
+  return state.responders.find((r) => r.id === bot.responderId) || state.responders[0];
+}
+
+/**
+ * @param {string} prefix  '' drives the first responder, 'p2' the second — the bot
+ *   presses the same prefixed action names the real binding table defines, so a co-op
+ *   test exercises the two-crew command path rather than a special one built for it.
+ */
+export function makeBotInput(prefix = '') {
   const down = new Set();
   const pressed = new Set();
+  const a = (n) => (prefix ? prefix + n[0].toUpperCase() + n.slice(1) : n);
   return {
-    down, pressed,
-    hold(action) { down.add(action); },
-    release(action) { down.delete(action); },
+    down, pressed, prefix,
+    hold(action) { down.add(a(action)); },
+    release(action) { down.delete(a(action)); },
     /* Clears BOTH sets. game.frame() runs zero steps on some frames (the fixed-step
      * accumulator), and a tap left sitting in `pressed` fires on a later step — the
      * bot pressed E to get into the engine and a stale E pressed itself straight back
      * out of the cab, over and over, for the rest of the shift. */
     releaseAll() { down.clear(); pressed.clear(); },
-    tap(action) { pressed.add(action); down.add(action); },
-    isDown(a) { return down.has(a); },
-    wasPressed(a) { return pressed.has(a); },
+    tap(action) { pressed.add(a(action)); down.add(a(action)); },
+    isDown(n) { return down.has(n); },
+    wasPressed(n) { return pressed.has(n); },
     wasReleased() { return false; },
     moveAxis() {
-      let x = (down.has('moveRight') ? 1 : 0) - (down.has('moveLeft') ? 1 : 0);
-      let y = (down.has('moveDown') ? 1 : 0) - (down.has('moveUp') ? 1 : 0);
+      let x = (down.has(a('moveRight')) ? 1 : 0) - (down.has(a('moveLeft')) ? 1 : 0);
+      let y = (down.has(a('moveDown')) ? 1 : 0) - (down.has(a('moveUp')) ? 1 : 0);
       if (x && y) { const inv = Math.SQRT1_2; x *= inv; y *= inv; }
       return { x, y };
     },
     endStep() {
-      for (const a of pressed) if (a !== 'moveUp' && a !== 'moveDown' && a !== 'moveLeft' && a !== 'moveRight') down.delete(a);
+      const moves = ['moveUp', 'moveDown', 'moveLeft', 'moveRight'].map(a);
+      for (const k of pressed) if (!moves.includes(k)) down.delete(k);
       pressed.clear();
     },
+  };
+}
+
+/** One input object that answers for a whole crew, so two bots can share one game. */
+export function mergeBotInputs(inputs) {
+  return {
+    isDown: (n) => inputs.some((i) => i.isDown(n)),
+    wasPressed: (n) => inputs.some((i) => i.wasPressed(n)),
+    wasReleased: () => false,
+    moveAxis: (prefix = '') => {
+      const owner = inputs.find((i) => i.prefix === prefix);
+      return owner ? owner.moveAxis() : { x: 0, y: 0 };
+    },
+    endStep: () => { for (const i of inputs) i.endStep(); },
   };
 }
 
@@ -170,9 +196,11 @@ function apparatusFor(state, inc) {
 }
 
 export class CrewBot {
-  constructor(game) {
+  /** @param {string} responderId  which crew member this bot is the hands of */
+  constructor(game, responderId = 'r1') {
     this.game = game;
-    this.input = makeBotInput();
+    this.responderId = responderId;
+    this.input = makeBotInput(responderId === 'r2' ? 'p2' : '');
     this.targetIncidentId = null;
     this.stuckMs = 0;
     this.reverseMs = 0;
@@ -204,12 +232,12 @@ export class CrewBot {
     // A patient in the back outranks everything: finish the transport first.
     const carrying = s.apparatus.find((a) => a.patientId);
     if (carrying) {
-      if (s.player.inVehicleId === carrying.id) { this.driveTo(CLINIC.x, CLINIC.y, 8); return inp; }
-      if (!s.player.inVehicleId) { this.goToVehicle(s, carrying); return inp; }
+      if (me(s, this).inVehicleId === carrying.id) { this.driveTo(CLINIC.x, CLINIC.y, 8); return inp; }
+      if (!me(s, this).inVehicleId) { this.goToVehicle(s, carrying); return inp; }
     }
 
-    if (s.player.inVehicleId) {
-      const riding = s.apparatus.find((a) => a.id === s.player.inVehicleId);
+    if (me(s, this).inVehicleId) {
+      const riding = s.apparatus.find((a) => a.id === me(s, this).inVehicleId);
       const target = this.fetching || inc;
       if (this.drivingHopeless) {
         // Give up on driving for THIS call and walk it. Without the latch the bot got
@@ -235,23 +263,23 @@ export class CrewBot {
      * spent the shift being yanked back by a 34 m tether it had never moved. Kit is
      * picked up AT the scene. Getting there is a driving problem, not a hands problem.
      */
-    const atScene = dist(s.player.x, s.player.y, inc.x, inc.y) < 26;
+    const atScene = dist(me(s, this).x, me(s, this).y, inc.x, inc.y) < 26;
     if (!atScene && this.walkingCallId === inc.id) { this.walkTowards(s, inc.x, inc.y); return inp; }
     if (!atScene) {
       // Put the line down before walking off. The hose is tethered to its engine, so
       // carrying it away from the scene silently anchors you 34 m from the truck —
       // which is exactly what happened, for ninety seconds, on the way to the next call.
-      const held = heldTool(s);
+      const held = heldTool(s, me(s, this));
       if (held && held.defId === 'hose') { inp.tap('drop'); this.note('dropping the line'); return inp; }
 
       let ap = s.apparatus.find((a) => a.id === this.plannedApparatus) || s.apparatus[0];
       const near = s.apparatus.slice().sort((a, b) =>
-        dist(s.player.x, s.player.y, a.x, a.y) - dist(s.player.x, s.player.y, b.x, b.y))[0];
+        dist(me(s, this).x, me(s, this).y, a.x, a.y) - dist(me(s, this).x, me(s, this).y, b.x, b.y))[0];
       // The truck you need is across town and the one you came in is at your elbow:
       // drive that one to it rather than walking a hundred metres.
       if (near && ap && near.id !== ap.id &&
-          dist(s.player.x, s.player.y, ap.x, ap.y) > 40 &&
-          dist(s.player.x, s.player.y, near.x, near.y) < 30) {
+          dist(me(s, this).x, me(s, this).y, ap.x, ap.y) > 40 &&
+          dist(me(s, this).x, me(s, this).y, near.x, near.y) < 30) {
         this.fetching = { x: ap.x, y: ap.y };
         ap = near;
       }
@@ -265,7 +293,7 @@ export class CrewBot {
     // A patient who needs the clinic needs the ambulance HERE. Dragging them two
     // hundred metres to the station at half walking pace is not a plan; it is how the
     // bot lost every transport it ever started.
-    if (job.kind === 'transport' && !s.player.draggingVictimId) {
+    if (job.kind === 'transport' && !me(s, this).draggingVictimId) {
       const amb = s.apparatus.find((a) => a.id === 'ambulance');
       if (amb && dist(amb.x, amb.y, inc.x, inc.y) > 30) {
         if (this.fetchingId !== amb.id) { this.note('going back for the ambulance'); this.fetchingId = amb.id; }
@@ -280,7 +308,7 @@ export class CrewBot {
     // beat, and the bot has to live it like anyone else.
     if (job.tool && !this.canDoHere(s, job)) {
       const src = s.apparatus.find((a) => s.tools.some((t) => t.carrier === a.id && t.defId === job.tool));
-      if (src && dist(s.player.x, s.player.y, src.x, src.y) > 26) {
+      if (src && dist(me(s, this).x, me(s, this).y, src.x, src.y) > 26) {
         if (this.fetchingId !== src.id) { this.note(`the ${job.tool} is on ${src.name}, back for it`); this.fetchingId = src.id; }
         this.fetching = inc;                 // the truck comes to the call, not the reverse
         this.plannedApparatus = src.id;
@@ -294,7 +322,7 @@ export class CrewBot {
   }
 
   goToVehicle(s, ap) {
-    if (dist(s.player.x, s.player.y, ap.x, ap.y) < CONFIG.player.reachM + 1.8) {
+    if (dist(me(s, this).x, me(s, this).y, ap.x, ap.y) < CONFIG.player.reachM + 1.8) {
       this.input.tap('interact');
       this.actions.entries++;
       // Boarding ends the errand. Leaving `fetching` set meant the bot arrived at the
@@ -335,7 +363,7 @@ export class CrewBot {
     // drives back and forth across town and closes nothing.
     const best = open.slice().sort((a, b) =>
       (RANK[a.priority] - RANK[b.priority]) ||
-      (dist(s.player.x, s.player.y, a.x, a.y) - dist(s.player.x, s.player.y, b.x, b.y)))[0];
+      (dist(me(s, this).x, me(s, this).y, a.x, a.y) - dist(me(s, this).x, me(s, this).y, b.x, b.y)))[0];
     if (current && RANK[current.priority] <= RANK[best.priority]) return current;
     if (best.id !== this.targetIncidentId) {
       this.jobsAttempted++;
@@ -388,18 +416,18 @@ export class CrewBot {
   /** Is the kit for this job available from here, or does it need a trip? */
   canDoHere(s, job) {
     if (!job.tool) return true;
-    const held = heldTool(s);
+    const held = heldTool(s, me(s, this));
     if (held && held.defId === job.tool) return true;
-    return toolsInReachOf(s, s.player.x, s.player.y).some((a) => a.tool.defId === job.tool);
+    return toolsInReachOf(s, me(s, this).x, me(s, this).y).some((a) => a.tool.defId === job.tool);
   }
 
   work(s, job) {
     this.lastJob = job;
     const inp = this.input;
-    const held = heldTool(s);
+    const held = heldTool(s, me(s, this));
 
     if (job.tool && (!held || held.defId !== job.tool)) {
-      const avail = toolsInReachOf(s, s.player.x, s.player.y);
+      const avail = toolsInReachOf(s, me(s, this).x, me(s, this).y);
       const slot = avail.findIndex((a) => a.tool.defId === job.tool);
       if (slot >= 0 && slot < 5) {
         inp.tap(`slot${slot + 1}`);
@@ -416,15 +444,15 @@ export class CrewBot {
 
     if (job.kind === 'transport') {
       const amb = s.apparatus.find((a) => a.id === 'ambulance');
-      if (s.player.draggingVictimId) {
-        if (dist(s.player.x, s.player.y, amb.x, amb.y) < CONFIG.player.reachM + 2.0) {
+      if (me(s, this).draggingVictimId) {
+        if (dist(me(s, this).x, me(s, this).y, amb.x, amb.y) < CONFIG.player.reachM + 2.0) {
           inp.tap('interact');
           this.actions.patientsLoaded++;
           this.note('patient loaded');
         } else this.walkTowards(s, amb.x, amb.y);
         return;
       }
-      if (dist(s.player.x, s.player.y, job.x, job.y) < CONFIG.player.reachM) inp.tap('interact');
+      if (dist(me(s, this).x, me(s, this).y, job.x, job.y) < CONFIG.player.reachM) inp.tap('interact');
       else this.walkTowards(s, job.x, job.y);
       return;
     }
@@ -432,7 +460,7 @@ export class CrewBot {
     // Working range: a stream is used from a distance, everything else hands-on.
     const reach = job.stream ? CONFIG.water.streamReachM * 0.55 : CONFIG.player.reachM * 0.8;
     const standoff = job.stream ? 2.6 : 0;
-    const d = dist(s.player.x, s.player.y, job.x, job.y);
+    const d = dist(me(s, this).x, me(s, this).y, job.x, job.y);
     if (d > reach) { this.walkTowards(s, job.x, job.y); return; }
     // Do not stand on the thing you are pointing a hose at. At zero range the direction
     // to the target is undefined, no movement key gets pressed, and facing therefore
@@ -447,10 +475,10 @@ export class CrewBot {
    *  target for a step and then squeezes. Exactly the aiming a keyboard player has. */
   faceAndHold(s, job) {
     const inp = this.input;
-    const dx = job.x - s.player.x, dy = job.y - s.player.y;
+    const dx = job.x - me(s, this).x, dy = job.y - me(s, this).y;
     const bearing = Math.atan2(dy, dx);
-    const aimed = Math.abs(Math.atan2(Math.sin(bearing - s.player.facing),
-      Math.cos(bearing - s.player.facing))) < 0.42;
+    const aimed = Math.abs(Math.atan2(Math.sin(bearing - me(s, this).facing),
+      Math.cos(bearing - me(s, this).facing))) < 0.42;
     if (!aimed) {
       // Press with a full-length vector so a key is always issued: nudging by the raw
       // offset does nothing at all once you are within half a metre.
@@ -461,14 +489,14 @@ export class CrewBot {
   }
 
   pressAway(s, job) {
-    const bearing = Math.atan2(s.player.y - job.y, s.player.x - job.x);
+    const bearing = Math.atan2(me(s, this).y - job.y, me(s, this).x - job.x);
     this.pressTowards(Math.cos(bearing) * 10, Math.sin(bearing) * 10);
   }
 
   walkTowards(s, tx, ty) {
     // Structures stop people too, unless they use the door. Waypoint through it.
     const targetB = buildingAt(tx, ty);
-    const insideId = s.player.insideBuildingId;
+    const insideId = me(s, this).insideBuildingId;
     if (targetB && insideId !== targetB.id) {
       // Aim THROUGH the doorway, not at it. Walking to the door itself and stopping
       // put the bot in a loop: step off the door mark toward the fire, notice it is no
@@ -478,11 +506,11 @@ export class CrewBot {
       const cx = targetB.x + targetB.w / 2, cy = targetB.y + targetB.h / 2;
       const ux = cx - door.x, uy = cy - door.y, ul = Math.hypot(ux, uy) || 1;
       const entryX = door.x + (ux / ul) * 3.0, entryY = door.y + (uy / ul) * 3.0;
-      this.pressTowards(entryX - s.player.x, entryY - s.player.y);
+      this.pressTowards(entryX - me(s, this).x, entryY - me(s, this).y);
       return;
     } else if (!targetB && insideId) {
       const door = BUILDING_BY_ID[insideId].door;
-      if (dist(s.player.x, s.player.y, door.x, door.y) > 1.6) { this.pressTowards(door.x - s.player.x, door.y - s.player.y); return; }
+      if (dist(me(s, this).x, me(s, this).y, door.x, door.y) > 1.6) { this.pressTowards(door.x - me(s, this).x, door.y - me(s, this).y); return; }
     }
 
     /* Walk the roads for anything more than a few paces.
@@ -494,16 +522,16 @@ export class CrewBot {
      * anyway, so pedestrians use it too. Local heuristics are gone.
      */
     let tx2 = tx, ty2 = ty;
-    if (dist(s.player.x, s.player.y, tx, ty) > 22) {
+    if (dist(me(s, this).x, me(s, this).y, tx, ty) > 22) {
       const key = `foot:${Math.round(tx)},${Math.round(ty)}`;
       if (this.footRouteKey !== key || !this.footRoute || !this.footRoute.length) {
-        this.footRoute = routeThrough(s, s.player.x, s.player.y, tx, ty);
+        this.footRoute = routeThrough(s, me(s, this).x, me(s, this).y, tx, ty);
         this.footRouteKey = key;
       }
       while (this.footRoute.length > 1 &&
-             dist(s.player.x, s.player.y, this.footRoute[0].x, this.footRoute[0].y) < 6) this.footRoute.shift();
+             dist(me(s, this).x, me(s, this).y, this.footRoute[0].x, this.footRoute[0].y) < 6) this.footRoute.shift();
       while (this.footRoute.length > 1 &&
-             dist(this.footRoute[0].x, this.footRoute[0].y, tx, ty) > dist(s.player.x, s.player.y, tx, ty)) {
+             dist(this.footRoute[0].x, this.footRoute[0].y, tx, ty) > dist(me(s, this).x, me(s, this).y, tx, ty)) {
         this.footRoute.shift();
       }
       const leg = this.footRoute[0];
@@ -512,17 +540,17 @@ export class CrewBot {
       this.footRoute = null; this.footRouteKey = null;
     }
 
-    let dx = tx2 - s.player.x, dy = ty2 - s.player.y;
+    let dx = tx2 - me(s, this).x, dy = ty2 - me(s, this).y;
 
     // Give a live wire a wide berth unless we are carrying the thing that kills it.
-    const held = heldTool(s);
+    const held = heldTool(s, me(s, this));
     if (!held || held.defId !== 'hotstick') {
       const len = Math.hypot(dx, dy) || 1;
-      const aheadX = s.player.x + (dx / len) * 3, aheadY = s.player.y + (dy / len) * 3;
+      const aheadX = me(s, this).x + (dx / len) * 3, aheadY = me(s, this).y + (dy / len) * 3;
       const zone = liveZoneAt(s, aheadX, aheadY);
       if (zone) {
         // step around the ring rather than through it
-        const away = Math.atan2(s.player.y - zone.y, s.player.x - zone.x);
+        const away = Math.atan2(me(s, this).y - zone.y, me(s, this).x - zone.x);
         dx = Math.cos(away + Math.PI / 2.2) * 10;
         dy = Math.sin(away + Math.PI / 2.2) * 10;
       }
@@ -542,7 +570,7 @@ export class CrewBot {
   driveTo(tx, ty, arriveM) {
     const s = this.game.state;
     const inp = this.input;
-    const ap = s.apparatus.find((a) => a.id === s.player.inVehicleId);
+    const ap = s.apparatus.find((a) => a.id === me(s, this).inVehicleId);
     if (!ap) return;
 
     // Re-route when the destination changes, when the road ahead gets blocked, or

@@ -56,4 +56,5 @@ S.camera._recomputeScale();
 S.camera.follow(s.player.x, s.player.y, 0);
 
 // draw a few frames so the HUD and the canvas are both current
+g.clock.setPaused(true);
 for (let i = 0; i < 3; i++) S.frame(performance.now());

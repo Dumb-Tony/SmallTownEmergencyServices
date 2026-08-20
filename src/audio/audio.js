@@ -51,17 +51,27 @@ export const RANGE = Object.freeze({
  *            engine:{gain:number, pitch:number}, gasRate:number}}
  */
 export function mixFor(state) {
-  const p = state.player;
+  const crew = state.responders && state.responders.length ? state.responders : [state.player];
   const mix = {
     siren: 0, fire: 0, water: 0, saw: 0, arc: 0,
     engine: { gain: 0, pitch: 0 },
     gasRate: 0,
   };
-  if (!p) return mix;
+  if (!crew[0]) return mix;
+
+  /* Distance is measured to the NEAREST crew member. With two responders on one
+   * screen there is no single pair of ears to put in the world, and "whichever of you
+   * is closest to it" is both the honest answer and the one that matches what the
+   * camera is showing. */
+  const near = (x, y) => {
+    let d = Infinity;
+    for (const r of crew) d = Math.min(d, dist(r.x, r.y, x, y));
+    return d;
+  };
 
   for (const ap of state.apparatus) {
     if (!ap.siren) continue;
-    mix.siren = Math.max(mix.siren, atten(dist(p.x, p.y, ap.x, ap.y), RANGE.siren));
+    mix.siren = Math.max(mix.siren, atten(near(ap.x, ap.y), RANGE.siren));
   }
 
   // Fire loudness is burning cells, attenuated per cell by its own distance: a big
@@ -72,35 +82,40 @@ export function mixFor(state) {
     if (h.kind === 'fire') {
       for (const c of h.cells) {
         if (!c.burning) continue;
-        fire += 0.10 * atten(dist(p.x, p.y, c.x, c.y), RANGE.fire);
+        fire += 0.10 * atten(near(c.x, c.y), RANGE.fire);
       }
     } else if (h.kind === 'wreck' && h.burning) {
-      fire += 0.45 * atten(dist(p.x, p.y, h.x, h.y), RANGE.wreck);
+      fire += 0.45 * atten(near(h.x, h.y), RANGE.wreck);
     } else if (h.kind === 'power' && h.live) {
-      mix.arc = Math.max(mix.arc, atten(dist(p.x, p.y, h.x, h.y), RANGE.arc));
+      mix.arc = Math.max(mix.arc, atten(near(h.x, h.y), RANGE.arc));
     }
   }
   mix.fire = Math.min(1, fire);
 
-  const held = state.tools.find((t) => t.carrier === 'player');
-  if (held && held.flowing) mix.water = held.defId === 'hose' ? 1 : 0.55;
-  if (held && held.defId === 'chainsaw') {
-    // Idling in your hands, screaming while it is in the cut.
-    mix.saw = p.useProgressMs > 0 ? 1 : 0.35;
-  }
-  if (held && held.defId === 'gasmeter') {
-    // 0 to ~14 clicks a second. Carrying the meter is what makes gas perceptible at
-    // all, so this is a gameplay signal, not decoration.
-    mix.gasRate = Math.min(14, gasAt(state, p.x, p.y) * 14);
+  // Anything in anyone's hands. Two crew both cutting is still one saw in your ears.
+  for (const r of crew) {
+    const held = state.tools.find((t) => t.carrier === r.id);
+    if (!held) continue;
+    if (held.flowing) mix.water = Math.max(mix.water, held.defId === 'hose' ? 1 : 0.55);
+    if (held.defId === 'chainsaw') {
+      // Idling in your hands, screaming while it is in the cut.
+      mix.saw = Math.max(mix.saw, r.useProgressMs > 0 ? 1 : 0.35);
+    }
+    if (held.defId === 'gasmeter') {
+      // 0 to ~14 clicks a second. Carrying the meter is what makes gas perceptible at
+      // all, so this is a gameplay signal, not decoration.
+      mix.gasRate = Math.max(mix.gasRate, Math.min(14, gasAt(state, r.x, r.y) * 14));
+    }
   }
 
-  if (p.inVehicleId) {
-    const ap = state.apparatus.find((a) => a.id === p.inVehicleId);
-    if (ap) {
-      const def = state.apparatusDefs[ap.defId];
-      const frac = Math.min(1, Math.abs(ap.speed) / (def.maxSpeed || 1));
-      mix.engine = { gain: 0.35 + frac * 0.65, pitch: 0.6 + frac * 1.9 };
-    }
+  for (const r of crew) {
+    if (!r.inVehicleId) continue;
+    const ap = state.apparatus.find((a) => a.id === r.inVehicleId);
+    if (!ap) continue;
+    const def = state.apparatusDefs[ap.defId];
+    const frac = Math.min(1, Math.abs(ap.speed) / (def.maxSpeed || 1));
+    const gain = 0.35 + frac * 0.65;
+    if (gain > mix.engine.gain) mix.engine = { gain, pitch: 0.6 + frac * 1.9 };
   }
 
   return mix;

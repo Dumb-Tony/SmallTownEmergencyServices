@@ -19,11 +19,12 @@ g.clock.skipMs(12000, (ms) => g.step(ms, null));
 
 const eng = s.apparatus.find((a) => a.id === 'engine');
 eng.x = 196; eng.y = 150; eng.angle = 0; eng.speed = 14; eng.siren = true;
-eng.occupied = true;
+eng.driverId = s.player.id;
 s.player.inVehicleId = eng.id;
 s.player.x = eng.x; s.player.y = eng.y; s.player.facing = eng.angle;
 
 S.camera.viewWidthM = CONFIG.render.viewWidthM;
 S.camera._recomputeScale();
 S.camera.follow(eng.x, eng.y, 0);
+g.clock.setPaused(true);
 for (let i = 0; i < 3; i++) S.frame(performance.now());

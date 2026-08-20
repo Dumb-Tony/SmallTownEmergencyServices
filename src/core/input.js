@@ -14,19 +14,39 @@
  * equipment, siren." That is the whole table. Anything that wants a sixth verb has to
  * argue for it against the rule. */
 export const DEFAULT_BINDINGS = Object.freeze({
-  moveUp:    ['KeyW', 'ArrowUp'],       // throttle in the cab
-  moveDown:  ['KeyS', 'ArrowDown'],     // brake, then reverse
-  moveLeft:  ['KeyA', 'ArrowLeft'],
-  moveRight: ['KeyD', 'ArrowRight'],
+  moveUp:    ['KeyW'],                  // throttle in the cab
+  moveDown:  ['KeyS'],                  // brake, then reverse
+  moveLeft:  ['KeyA'],
+  moveRight: ['KeyD'],
   interact:  ['KeyE'],                  // in/out, grab/release/load a patient
   use:       ['Space'],                 // held: whatever is in your hands
   drop:      ['KeyF'],
   siren:     ['KeyQ'],
   slot1:     ['Digit1'], slot2: ['Digit2'], slot3: ['Digit3'],
   slot4:     ['Digit4'], slot5: ['Digit5'],
+
+  /* The second responder, on the same keyboard. The arrows are NOT also bound to the
+   * first responder: shared keys would drive both crew members at once the moment a
+   * partner joined, and a control that does something different depending on who else
+   * is on shift is worse than no control. Slots take the numpad or the top-row 6-0, so
+   * a laptop without a numeric keypad can still play. */
+  p2MoveUp:    ['ArrowUp'],
+  p2MoveDown:  ['ArrowDown'],
+  p2MoveLeft:  ['ArrowLeft'],
+  p2MoveRight: ['ArrowRight'],
+  p2Interact:  ['ShiftRight'],
+  p2Use:       ['Slash'],
+  p2Drop:      ['Period'],
+  p2Siren:     ['Comma'],
+  p2Slot1: ['Numpad1', 'Digit6'], p2Slot2: ['Numpad2', 'Digit7'],
+  p2Slot3: ['Numpad3', 'Digit8'], p2Slot4: ['Numpad4', 'Digit9'],
+  p2Slot5: ['Numpad5', 'Digit0'],
+
   calls:     ['Tab'],
   pause:     ['Escape'],
   restart:   ['KeyR'],
+  coop:      ['KeyP'],
+  mute:      ['KeyM'],
   debug:     ['F3'],
 });
 
@@ -103,10 +123,14 @@ export class Input {
     return false;
   }
 
-  /** -1..1 on each axis, from the four movement actions. Diagonals are normalised. */
-  moveAxis() {
-    let x = (this.isDown('moveRight') ? 1 : 0) - (this.isDown('moveLeft') ? 1 : 0);
-    let y = (this.isDown('moveDown') ? 1 : 0) - (this.isDown('moveUp') ? 1 : 0);
+  /**
+   * -1..1 on each axis, from the four movement actions. Diagonals are normalised.
+   * @param {string} prefix  '' for the first responder, 'p2' for the second
+   */
+  moveAxis(prefix = '') {
+    const a = (n) => (prefix ? prefix + n[0].toUpperCase() + n.slice(1) : n);
+    let x = (this.isDown(a('moveRight')) ? 1 : 0) - (this.isDown(a('moveLeft')) ? 1 : 0);
+    let y = (this.isDown(a('moveDown')) ? 1 : 0) - (this.isDown(a('moveUp')) ? 1 : 0);
     if (x && y) { const inv = Math.SQRT1_2; x *= inv; y *= inv; }
     return { x, y };
   }

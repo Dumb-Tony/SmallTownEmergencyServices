@@ -18,8 +18,8 @@ import { HYDRANTS, POLES, CLINIC, dist, nearestOf } from '../data/town.js';
 import { applyWater } from './hazards.js';
 import { treatVictim, victimHandled } from './victims.js';
 
-export function heldTool(state) {
-  return state.player.toolId ? state.tools.find((t) => t.id === state.player.toolId) : null;
+export function heldTool(state, r = state.player) {
+  return r && r.toolId ? state.tools.find((t) => t.id === r.toolId) : null;
 }
 
 /**
@@ -60,26 +60,25 @@ export function toolsInReachOf(state, x, y, radius = 3.6) {
 }
 
 /** What E would do right now — the HUD prints this, so the prompt is never a guess. */
-export function contextPrompt(state) {
-  const p = state.player;
+export function contextPrompt(state, r = state.player) {
+  const p = r;
   if (p.inVehicleId) {
     const ap = state.apparatus.find((a) => a.id === p.inVehicleId);
     return { key: 'E', text: `get out of ${ap.name}` };
   }
   if (p.draggingVictimId) {
-    const amb = nearAmbulance(state);
+    const amb = nearAmbulance(state, p);
     if (amb) return { key: 'E', text: `load patient into ${amb.name}` };
     return { key: 'E', text: 'let the patient down' };
   }
-  const v = grabbableVictim(state);
+  const v = grabbableVictim(state, p);
   if (v) return { key: 'E', text: 'take hold of the patient' };
-  const ap = nearestApparatus(state, CONFIG.player.reachM + 2.2);
+  const ap = nearestApparatus(state, p, CONFIG.player.reachM + 2.2);
   if (ap) return { key: 'E', text: `get into ${ap.name}` };
   return null;
 }
 
-function nearestApparatus(state, radius) {
-  const p = state.player;
+function nearestApparatus(state, p, radius) {
   let best = null, bestD = radius;
   for (const a of state.apparatus) {
     const d = dist(p.x, p.y, a.x, a.y) - state.apparatusDefs[a.defId].lengthM * 0.3;
@@ -88,8 +87,7 @@ function nearestApparatus(state, radius) {
   return best;
 }
 
-function nearAmbulance(state) {
-  const p = state.player;
+function nearAmbulance(state, p) {
   for (const a of state.apparatus) {
     const def = state.apparatusDefs[a.defId];
     if (!def.patientBay || a.patientId) continue;
@@ -98,11 +96,15 @@ function nearAmbulance(state) {
   return null;
 }
 
-function grabbableVictim(state) {
-  const p = state.player;
+function grabbableVictim(state, p) {
   let best = null, bestD = CONFIG.player.reachM + 0.8;
   for (const v of state.victims) {
     if (v.lost || v.delivered || v.trappedBy || v.inApparatusId) continue;
+    // Somebody already has them. Two people cannot carry one casualty, and without
+    // this the second responder silently took the patient out of the first one's arms
+    // — the patient stayed put and the first crew member kept walking, "dragging"
+    // nobody. There is one of them, so there is one pair of hands on them.
+    if (v.draggedBy && v.draggedBy !== p.id) continue;
     const d = dist(p.x, p.y, v.x, v.y);
     if (d < bestD) { bestD = d; best = v; }
   }
@@ -115,40 +117,42 @@ function grabbableVictim(state) {
  * @param {{interact:boolean, drop:boolean, use:boolean, siren:boolean, slot:number|null}} cmd
  * @returns {Array<object>} events
  */
-export function stepInteraction(state, cmd, dtMs) {
+export function stepInteraction(state, cmd, dtMs, r = state.player) {
   const out = [];
-  const p = state.player;
+  const p = r;
 
   // Streams are re-asserted every step by whoever is squeezing the trigger, so the
-  // renderer never draws water that stopped flowing three steps ago.
-  for (const t of state.tools) t.flowing = false;
+  // renderer never draws water that stopped flowing three steps ago. Each responder
+  // clears only their OWN nozzle: this runs once per responder, and clearing the whole
+  // list meant the second crew member silenced the first one's line every step.
+  for (const t of state.tools) if (t.carrier === null || t.carrier === p.id) t.flowing = false;
 
   if (p.stunMs > 0) { p.useProgressMs = 0; return out; }
 
-  if (cmd.interact) doInteract(state, out);
-  if (cmd.drop) doDrop(state, out);
-  if (cmd.slot != null) doTakeSlot(state, cmd.slot, out);
+  if (cmd.interact) doInteract(state, p, out);
+  if (cmd.drop) doDrop(state, p, out);
+  if (cmd.slot != null) doTakeSlot(state, p, cmd.slot, out);
   if (cmd.siren && p.inVehicleId) {
     const ap = state.apparatus.find((a) => a.id === p.inVehicleId);
     ap.siren = !ap.siren;
     out.push({ type: 'SIREN_TOGGLED', apparatusId: ap.id, on: ap.siren });
   }
 
-  if (cmd.use && !p.inVehicleId) doUse(state, dtMs, out);
+  if (cmd.use && !p.inVehicleId) doUse(state, p, dtMs, out);
   else p.useProgressMs = 0;
 
-  applyHoseTether(state, out);
+  applyHoseTether(state, p, out);
   applyWaterSupply(state, dtMs);
 
   return out;
 }
 
-function doInteract(state, out) {
-  const p = state.player;
+function doInteract(state, p, out) {
 
   if (p.inVehicleId) {
     const ap = state.apparatus.find((a) => a.id === p.inVehicleId);
-    ap.occupied = false;
+    if (ap.driverId === p.id) ap.driverId = null;
+    ap.passengerIds = ap.passengerIds.filter((id) => id !== p.id);
     p.inVehicleId = null;
     const side = ap.angle + Math.PI / 2;
     p.x = ap.x + Math.cos(side) * 2.4;
@@ -160,7 +164,7 @@ function doInteract(state, out) {
 
   if (p.draggingVictimId) {
     const v = state.victims.find((x) => x.id === p.draggingVictimId);
-    const amb = nearAmbulance(state);
+    const amb = nearAmbulance(state, p);
     if (amb && v) {
       v.inApparatusId = amb.id;
       v.draggedBy = null;
@@ -175,33 +179,41 @@ function doInteract(state, out) {
     return;
   }
 
-  const v = grabbableVictim(state);
+  const v = grabbableVictim(state, p);
   if (v) {
     // Hands are needed for this. Dropping the saw to move a patient is the point.
-    if (p.toolId) doDrop(state, out);
-    v.draggedBy = 'player';
+    if (p.toolId) doDrop(state, p, out);
+    v.draggedBy = p.id;
     p.draggingVictimId = v.id;
     out.push({ type: 'PATIENT_GRABBED', victimId: v.id });
     return;
   }
 
-  const ap = nearestApparatus(state, CONFIG.player.reachM + 2.2);
-  if (ap && !ap.occupied) {
+  const ap = nearestApparatus(state, p, CONFIG.player.reachM + 2.2);
+  if (ap) {
     if (p.toolId) {
-      const t = heldTool(state);
-      if (t && t.defId === 'hose') doDrop(state, out);      // the nozzle stays outside
+      const t = heldTool(state, p);
+      if (t && t.defId === 'hose') doDrop(state, p, out);   // the nozzle stays outside
       else { t.carrier = ap.id; p.toolId = null; }          // stow what you are carrying
     }
-    ap.occupied = true;
+    /* First in gets the wheel; anyone after that rides.
+     *
+     * This is the whole of apparatus contention, and it is a property of the seating
+     * rather than a rule: two people cannot drive one truck, but they CAN arrive
+     * together — which is the difference between co-op and two people playing beside
+     * each other. Whoever is driving is also the one holding everyone else hostage
+     * when they park badly, which is the story the GDD is asking for. */
+    const takingTheWheel = !ap.driverId;
+    if (takingTheWheel) ap.driverId = p.id;
+    else if (!ap.passengerIds.includes(p.id)) ap.passengerIds.push(p.id);
     p.inVehicleId = ap.id;
     p.vx = 0; p.vy = 0;
-    out.push({ type: 'ENTERED_APPARATUS', apparatusId: ap.id });
+    out.push({ type: 'ENTERED_APPARATUS', apparatusId: ap.id, driving: takingTheWheel, responderId: p.id });
   }
 }
 
-function doDrop(state, out) {
-  const p = state.player;
-  const t = heldTool(state);
+function doDrop(state, p, out) {
+  const t = heldTool(state, p);
   if (!t) return;
   t.carrier = null;
   t.x = p.x + Math.cos(p.facing) * CONFIG.tools.dropOffsetM;
@@ -211,18 +223,17 @@ function doDrop(state, out) {
   out.push({ type: 'TOOL_DROPPED', toolId: t.id, defId: t.defId, x: t.x, y: t.y });
 }
 
-function doTakeSlot(state, slot, out) {
-  const p = state.player;
+function doTakeSlot(state, p, slot, out) {
   if (p.inVehicleId) return;
   const avail = toolsInReachOf(state, p.x, p.y);
   if (slot < 0 || slot >= avail.length) {
     out.push({ type: 'NOTHING_IN_SLOT', slot });
     return;
   }
-  if (p.toolId) doDrop(state, out);
-  if (p.draggingVictimId) doInteract(state, out);   // both hands, again
+  if (p.toolId) doDrop(state, p, out);
+  if (p.draggingVictimId) doInteract(state, p, out);   // both hands, again
   const { tool } = avail[slot];
-  tool.carrier = 'player';
+  tool.carrier = p.id;
   tool.x = p.x; tool.y = p.y;
   p.toolId = tool.id;
   out.push({ type: 'TOOL_TAKEN', toolId: tool.id, defId: tool.defId });
@@ -230,16 +241,15 @@ function doTakeSlot(state, slot, out) {
 
 /* ── use ──────────────────────────────────────────────────────────────────── */
 
-function doUse(state, dtMs, out) {
-  const p = state.player;
-  const t = heldTool(state);
+function doUse(state, p, dtMs, out) {
+  const t = heldTool(state, p);
   if (!t) { p.useProgressMs = 0; return; }
   const def = TOOL_DEFS[t.defId];
 
-  if (def.mode === 'stream') { useStream(state, t, def, dtMs, out); return; }
+  if (def.mode === 'stream') { useStream(state, p, t, def, dtMs, out); return; }
   if (def.mode === 'passive') { p.useProgressMs = 0; return; }
 
-  const target = holdTarget(state, t.defId);
+  const target = holdTarget(state, t.defId, p);
   if (!target) {
     p.useProgressMs = 0;
     if (!p.wrongToolNotedAt || state.simTimeMs - p.wrongToolNotedAt > 2000) {
@@ -316,8 +326,7 @@ function doUse(state, dtMs, out) {
 }
 
 /** The one place that answers "what is this tool for, right here?". */
-export function holdTarget(state, defId) {
-  const p = state.player;
+export function holdTarget(state, defId, p = state.player) {
   const reach = CONFIG.player.reachM + 0.8;
 
   if (defId === 'medkit') {
@@ -381,8 +390,7 @@ export function holdTarget(state, defId) {
   return null;
 }
 
-function useStream(state, tool, def, dtMs, out) {
-  const p = state.player;
+function useStream(state, p, tool, def, dtMs, out) {
   const dt = dtMs / 1000;
   const dirX = Math.cos(p.facing), dirY = Math.sin(p.facing);
   const ox = p.x + dirX * 0.8, oy = p.y + dirY * 0.8;
@@ -419,9 +427,8 @@ function useStream(state, tool, def, dtMs, out) {
 /* ── hose and supply ──────────────────────────────────────────────────────── */
 
 /** The hose is a leash. Walk past its length and you stop, whatever you meant to do. */
-function applyHoseTether(state, out) {
-  const p = state.player;
-  const t = heldTool(state);
+function applyHoseTether(state, p, out) {
+  const t = heldTool(state, p);
   if (!t || t.defId !== 'hose') return;
 
   const eng = state.apparatus.find((a) => a.id === t.engineId);

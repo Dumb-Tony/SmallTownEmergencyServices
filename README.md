@@ -1,8 +1,8 @@
 # Small Town Emergency Services
 
-A cooperative-in-spirit (single-player for now) emergency-response sandbox in one
-continuous top-down town. Browser, Canvas 2D, ES modules, zero dependencies, no build
-step.
+A cooperative emergency-response sandbox in one continuous top-down town, for one or
+two players on the same keyboard. Browser, Canvas 2D, ES modules, zero dependencies,
+no build step.
 
 **▶ Play it: https://dumb-tony.github.io/SmallTownEmergencyServices/**
 
@@ -16,7 +16,7 @@ it changes the town you turn up to next time.
 See [GDD.md](GDD.md) for the design this is built against, and
 [CHANGELOG.md](CHANGELOG.md) for what has actually been built.
 
-![The engine spotted at a working structure fire, with two other calls outstanding](docs/scene.png)
+![Two volunteers working a structure fire: one inside on the line, one at the door with an extinguisher](docs/coop.png)
 
 ![Main Street at driving zoom, four calls on the board](docs/town.png)
 
@@ -50,8 +50,22 @@ That starts a local http server (ports 8381–8390) and opens a tab. **You canno
 | `F` | put down what you are holding |
 | `Q` | siren |
 | `TAB` | expand the call list · `ESC` pause · `M` mute · `F3` debug overlay |
+| `P` | **a second volunteer signs on**, on the same keyboard |
 
 Five verbs, as the GDD demands. Everything else is situation.
+
+The second responder drives with the **arrows**, and uses `RShift` (interact), `/` (use),
+`.` (put down), `,` (siren) and `numpad 1`–`5` or the top-row `6`–`0` for kit. Those keys
+are theirs alone — a control that does something different depending on who else is on
+shift is worse than no control.
+
+## Two of you
+
+Press `P` and a partner signs on mid-shift. There is one wheel, one nozzle and one
+patient, and those are contested by construction rather than by a rule: first into a
+cab drives and the other rides, a tool in someone's hands cannot be taken out of them,
+and a casualty already being carried cannot be picked up twice. Whoever is driving is
+also the one holding everyone else hostage when they park badly, which is the point.
 
 ## What is in the town
 
@@ -137,7 +151,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**283 assertions.**
+**304 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 
@@ -147,5 +161,6 @@ Deliberate MVP shortcuts, per the GDD's "deliberate simplifications":
 
 - proximity-and-facing interactions rather than rigid-body tools;
 - staged extrication and treatment rather than simulated procedure;
-- single player — the host-authoritative split is designed for but not built;
+- two players share one keyboard; the network transport is designed for but not built,
+  and is the remaining half of GDD Phase 5;
 - no smoke or fluid simulation; smoke is a visual read of burning cells.

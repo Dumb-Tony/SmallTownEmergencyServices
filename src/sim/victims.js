@@ -29,7 +29,7 @@ export function createVictim({ incidentId, x, y, severity = 'injured', trappedBy
     fleeing: false,
     treatedAtMs: null,
     stabilisedUntilMs: 0,
-    draggedBy: null,        // 'player'
+    draggedBy: null,        // a responder id, or null
     inApparatusId: null,
     delivered: false,
     lost: false,
@@ -71,11 +71,17 @@ export function stepVictims(state, dtMs) {
   for (const v of state.victims) {
     if (v.lost || v.delivered) continue;
 
-    /* position: carried, loaded, fleeing, or standing where they fell */
-    if (v.draggedBy === 'player') {
-      const p = state.player;
-      v.x = p.x - Math.cos(p.facing) * 1.0;
-      v.y = p.y - Math.sin(p.facing) * 1.0;
+    /* position: carried, loaded, fleeing, or standing where they fell.
+     * `draggedBy` is a responder id, so a patient cannot be held by two people, and
+     * a crew member who leaves mid-shift puts them down rather than towing them
+     * around by a dangling reference. */
+    const carrier = v.draggedBy
+      ? state.responders.find((q) => q.id === v.draggedBy) : null;
+    if (v.draggedBy && !carrier) v.draggedBy = null;
+
+    if (carrier) {
+      v.x = carrier.x - Math.cos(carrier.facing) * 1.0;
+      v.y = carrier.y - Math.sin(carrier.facing) * 1.0;
     } else if (v.inApparatusId) {
       const a = state.apparatus.find((ap) => ap.id === v.inApparatusId);
       if (a) { v.x = a.x; v.y = a.y; }

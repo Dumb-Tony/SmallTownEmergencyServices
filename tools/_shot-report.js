@@ -5,4 +5,5 @@ const S = window.__STES;
 const g = S.game;
 S.startShift();
 g.clock.skipMs(CONFIG.shift.durationMs + 2000, (ms) => g.step(ms, null));
+g.clock.setPaused(true);
 for (let i = 0; i < 3; i++) S.frame(performance.now());

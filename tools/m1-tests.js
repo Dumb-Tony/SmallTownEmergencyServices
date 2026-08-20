@@ -277,7 +277,7 @@ lines.push('--- D. electricity (killed at the pole, not at the wire) ---');
   s.player.x = pole.x; s.player.y = pole.y + 1;
   s.player.toolId = null;
   const stick = s.tools.find((t) => t.defId === 'hotstick');
-  stick.carrier = 'player'; s.player.toolId = stick.id;
+  stick.carrier = s.player.id; s.player.toolId = stick.id;
   for (let t = 0; t < CONFIG.tools.hotstickMs + 400; t += STEP) stepInteraction(s, CMD({ use: true }), STEP);
   ok('D7 the hot stick kills the line from the pole', !pwr.live);
   ok('D8 which resolves the hazard', pwr.resolved);
@@ -317,7 +317,7 @@ lines.push('--- E. a tree across the lane genuinely blocks the lane ---');
   s.player.x = site.x + 2; s.player.y = site.y + 2;
   s.player.toolId = null;
   const saw = s.tools.find((t) => t.defId === 'chainsaw');
-  saw.carrier = 'player'; s.player.toolId = saw.id;
+  saw.carrier = s.player.id; s.player.toolId = saw.id;
   let cleared = null;
   for (let t = 0; t < 20000; t += STEP) {
     const evs = stepInteraction(s, CMD({ use: true }), STEP);
@@ -394,7 +394,7 @@ lines.push('--- F. patients decline on a clock that ignores the crew ---');
   eq('F10 a trapped patient cannot simply be picked up', s.player.draggingVictimId, null);
 
   const spr = s.tools.find((t) => t.defId === 'spreaders');
-  spr.carrier = 'player'; s.player.toolId = spr.id;
+  spr.carrier = s.player.id; s.player.toolId = spr.id;
   let freed = false;
   for (let t = 0; t < CONFIG.medical.extricateMs + 600; t += STEP) {
     const evs = stepInteraction(s, CMD({ use: true }), STEP);

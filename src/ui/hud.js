@@ -66,6 +66,7 @@ export class Hud {
             <div><b>Q</b> siren</div>
             <div><b>TAB</b> call detail &nbsp; <b>ESC</b> pause &nbsp; <b>M</b> mute</div>
             <div><b>mouse</b> aim what you are holding</div>
+            <div class="coopkeys"><b>P</b> add a second volunteer — arrows, <b>RShift</b>, <b>/</b>, <b>.</b>, <b>,</b>, numpad</div>
           </div>
           <button id="startbtn">Start the shift</button>
         </div>
@@ -119,7 +120,20 @@ export class Hud {
       : s.town.confidence > 0.35 ? '#e8c04a' : '#e06a5a';
     this.el.confWord.textContent = confidenceWord(s.town.confidence);
 
-    const ap = s.player.inVehicleId ? s.apparatus.find((a) => a.id === s.player.inVehicleId) : null;
+    this.el.vehicle.innerHTML = s.responders.map((r) => this.statusFor(s, r)).join(
+      '<span class="crewsep"></span>');
+  }
+
+  /** One crew member's line. In co-op there are two, side by side, each in their own
+   *  colour — you should never have to work out which of you is out of water. */
+  statusFor(s, r) {
+    const ap = r.inVehicleId ? s.apparatus.find((a) => a.id === r.inVehicleId) : null;
+    const badge = s.coop
+      ? `<span class="who" style="color:${r.tint}">${r.name}</span> ` : '';
+    return badge + this.statusBits(s, r, ap).join(' ');
+  }
+
+  statusBits(s, r, ap) {
     if (ap) {
       const def = s.apparatusDefs[ap.defId];
       const bits = [`<b>${ap.name}</b>`, `${Math.round(Math.abs(ap.speed) * 3.6)} km/h`];
@@ -131,27 +145,31 @@ export class Hud {
       if (ap.hydrantId) bits.push('<span class="chip good">on a hydrant</span>');
       if (ap.damage > 0.1) bits.push(`<span class="chip bad">damage ${Math.round(ap.damage * 100)}%</span>`);
       if (ap.siren) bits.push('<span class="chip siren">SIREN</span>');
-      this.el.vehicle.innerHTML = bits.join(' ');
-    } else {
-      const t = heldTool(s);
-      const bits = [];
-      bits.push(t ? `<b>${t.name}</b>` : '<b>empty handed</b>');
-      if (t && t.defId === 'extinguisher') bits.push(`<span class="chip">${t.chargeL.toFixed(1)} L</span>`);
-      if (t && t.defId === 'hose') {
-        const eng = s.apparatus.find((a) => a.id === t.engineId);
-        const d = eng ? dist(s.player.x, s.player.y, eng.x, eng.y) : 0;
-        const taut = d > CONFIG.water.hoseMaxLengthM * 0.9;
-        bits.push(`<span class="chip ${taut ? 'bad' : ''}">${Math.round(d)} / ${CONFIG.water.hoseMaxLengthM} m</span>`);
-        if (eng) bits.push(waterChip(eng, s.apparatusDefs[eng.defId]));
-      }
-      if (t && t.defId === 'gasmeter') {
-        const g = gasAt(s, s.player.x, s.player.y);
-        bits.push(`<span class="chip ${g > 0.35 ? 'bad' : g > 0.1 ? 'warn' : 'good'}">gas ${(g * 100).toFixed(0)}%</span>`);
-      }
-      if (s.player.draggingVictimId) bits.push('<span class="chip patient">dragging a patient</span>');
-      if (s.player.stunMs > 0) bits.push('<span class="chip bad">on the ground</span>');
-      this.el.vehicle.innerHTML = bits.join(' ');
+      // Who is actually driving matters the moment there are two of you in one cab.
+      if (s.coop) bits.push(ap.driverId === r.id
+        ? '<span class="chip">at the wheel</span>'
+        : '<span class="chip dim">riding</span>');
+      return bits;
     }
+
+    const t = heldTool(s, r);
+    const bits = [];
+    bits.push(t ? `<b>${t.name}</b>` : '<b>empty handed</b>');
+    if (t && t.defId === 'extinguisher') bits.push(`<span class="chip">${t.chargeL.toFixed(1)} L</span>`);
+    if (t && t.defId === 'hose') {
+      const eng = s.apparatus.find((a) => a.id === t.engineId);
+      const d = eng ? dist(r.x, r.y, eng.x, eng.y) : 0;
+      const taut = d > CONFIG.water.hoseMaxLengthM * 0.9;
+      bits.push(`<span class="chip ${taut ? 'bad' : ''}">${Math.round(d)} / ${CONFIG.water.hoseMaxLengthM} m</span>`);
+      if (eng) bits.push(waterChip(eng, s.apparatusDefs[eng.defId]));
+    }
+    if (t && t.defId === 'gasmeter') {
+      const g = gasAt(s, r.x, r.y);
+      bits.push(`<span class="chip ${g > 0.35 ? 'bad' : g > 0.1 ? 'warn' : 'good'}">gas ${(g * 100).toFixed(0)}%</span>`);
+    }
+    if (r.draggingVictimId) bits.push('<span class="chip patient">dragging a patient</span>');
+    if (r.stunMs > 0) bits.push('<span class="chip bad">on the ground</span>');
+    return bits;
   }
 
   updateCalls(s) {
@@ -165,7 +183,9 @@ export class Hud {
     }
 
     this.el.calls.innerHTML = open.map((inc) => {
-      const d = Math.round(dist(s.player.x, s.player.y, inc.x, inc.y));
+      // distance from the NEAREST crew member: with two of you, "how far is it" means
+      // how far is it from whoever could actually go
+      const d = Math.round(Math.min(...s.responders.map((r) => dist(r.x, r.y, inc.x, inc.y))));
       const age = GameClock.formatMs(inc.ageMs);
       const vic = s.victims.filter((v) => inc.victimIds.includes(v.id) && !v.delivered && !v.lost);
       const worst = vic.sort((a, b) => a.condition - b.condition)[0];
@@ -187,8 +207,9 @@ export class Hud {
   updateBottom(s) {
     if (s.mode !== MODES.PLAYING) { this.el.prompt.textContent = ''; this.el.slots.innerHTML = ''; return; }
 
-    const ctx = contextPrompt(s);
-    const held = heldTool(s);
+    const me = s.responders[0];
+    const ctx = contextPrompt(s, me);
+    const held = heldTool(s, me);
     const parts = [];
     if (ctx) parts.push(`<kbd>${ctx.key}</kbd> ${ctx.text}`);
     if (held) {
@@ -196,15 +217,15 @@ export class Hud {
       parts.push(def.mode === 'passive'
         ? `<span class="dim">${def.hint}</span>`
         : `<kbd>SPACE</kbd> ${useVerb(held.defId)} &nbsp; <kbd>F</kbd> put down`);
-      if (s.player.useProgressMs > 0) {
+      if (me.useProgressMs > 0) {
         const total = progressTotal(held.defId);
-        parts.push(`<span class="progress"><i style="width:${Math.min(100, (s.player.useProgressMs / total) * 100)}%"></i></span>`);
+        parts.push(`<span class="progress"><i style="width:${Math.min(100, (me.useProgressMs / total) * 100)}%"></i></span>`);
       }
     }
     this.el.prompt.innerHTML = parts.join('&nbsp;&nbsp;·&nbsp;&nbsp;') || '<span class="dim">Nothing in reach.</span>';
 
-    if (s.player.inVehicleId) { this.el.slots.innerHTML = '<span class="dim">You are in the cab.</span>'; return; }
-    const avail = toolsInReachOf(s, s.player.x, s.player.y).slice(0, 5);
+    if (me.inVehicleId) { this.el.slots.innerHTML = '<span class="dim">You are in the cab.</span>'; return; }
+    const avail = toolsInReachOf(s, me.x, me.y).slice(0, 5);
     this.el.slots.innerHTML = avail.length
       ? avail.map((a, i) => `<span class="slot"><kbd>${i + 1}</kbd> ${a.tool.name}<em>${a.from}</em></span>`).join('')
       : '<span class="dim">No kit within reach.</span>';

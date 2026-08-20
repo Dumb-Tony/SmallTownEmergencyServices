@@ -35,6 +35,27 @@ export const MODES = Object.freeze({
   TITLE: 'title', PLAYING: 'playing', PAUSED: 'paused', REPORT: 'report',
 });
 
+/** Who is on the crew, and which keys drive them. Two on one keyboard for now; the
+ *  seam a network client would take is the same one — a per-responder command. */
+export const CREW = Object.freeze([
+  { id: 'r1', name: 'You',     tint: '#f6c445', prefix: '' },
+  { id: 'r2', name: 'Partner', tint: '#5fd0f0', prefix: 'p2' },
+]);
+
+export function makeResponder(index) {
+  const spec = CREW[index];
+  return {
+    id: spec.id, name: spec.name, tint: spec.tint, prefix: spec.prefix, index,
+    x: STATION.spawn.x + index * 3.2, y: STATION.spawn.y,
+    vx: 0, vy: 0, facing: -Math.PI / 2,
+    inVehicleId: null, toolId: null, draggingVictimId: null,
+    insideBuildingId: null,
+    stunMs: 0, shockCooldownMs: 0, soot: 0,
+    useProgressMs: 0, useTargetId: null,
+    wrongToolNotedAt: 0, dryNotedAt: 0, tautNotedAt: 0,
+  };
+}
+
 /* ── state ────────────────────────────────────────────────────────────────── */
 
 export function createInitialState({ seed, seedLabel, town }) {
@@ -44,14 +65,16 @@ export function createInitialState({ seed, seedLabel, town }) {
     simTimeMs: 0,
     shiftMs: CONFIG.shift.durationMs,
 
-    player: {
-      x: STATION.spawn.x, y: STATION.spawn.y, vx: 0, vy: 0, facing: -Math.PI / 2,
-      inVehicleId: null, toolId: null, draggingVictimId: null,
-      insideBuildingId: null,
-      stunMs: 0, shockCooldownMs: 0, soot: 0,
-      useProgressMs: 0, useTargetId: null,
-      wrongToolNotedAt: 0, dryNotedAt: 0, tautNotedAt: 0,
-    },
+    /* GDD Phase 5: the crew is a LIST. Everything that can be done by one responder
+     * can be done by any of them, and the things there is only one of — a nozzle, a
+     * driver's seat, a stretcher-load of ambulance — are contested by construction
+     * rather than by a rule written down somewhere.
+     *
+     * `state.player` below is the same OBJECT as responders[0], not a copy: it keeps
+     * the single-responder call sites honest instead of quietly diverging. */
+    responders: [],
+    player: null,
+    coop: false,
 
     apparatus: [],
     apparatusDefs: APPARATUS_BY_ID,
@@ -79,6 +102,9 @@ export function createInitialState({ seed, seedLabel, town }) {
     report: null,
   };
 
+  state.responders.push(makeResponder(0));
+  state.player = state.responders[0];
+
   let toolSeq = 1;
   const addTool = (defId, carrier, extra = {}) => {
     const def = TOOL_DEFS[defId];
@@ -100,7 +126,7 @@ export function createInitialState({ seed, seedLabel, town }) {
       x: bay.x, y: bay.y, angle: bay.angle, speed: 0,
       siren: false, damage: 0, odometerM: 0,
       waterL: def.tankL, hydrantId: null,
-      patientId: null, occupied: false,
+      patientId: null, driverId: null, passengerIds: [],
       homeX: bay.x, homeY: bay.y,
     };
     state.apparatus.push(ap);
@@ -178,24 +204,31 @@ export class Game {
     const s = this.state;
     s.simTimeMs = this.clock.simTimeMs;
 
-    const cmd = readCommand(input);
     const events = [];
 
-    /* 1. movement */
-    if (s.player.inVehicleId) {
-      const ap = s.apparatus.find((a) => a.id === s.player.inVehicleId);
-      const before = ap.odometerM;
-      events.push(...stepApparatusMovement(s, ap, cmd.drive, stepMs));
-      s.player.x = ap.x; s.player.y = ap.y; s.player.facing = ap.angle;
-      s.telemetry.distanceDrivenM += ap.odometerM - before;
-      s.telemetry.timeDrivingMs += stepMs;
-    } else {
-      events.push(...stepPlayerMovement(s, cmd.axis, stepMs, cmd.aim));
-      s.telemetry.timeOnFootMs += stepMs;
+    /* 1 & 2. every responder moves and acts, each from their own command.
+     *
+     * A vehicle is stepped once, by whoever is holding its wheel — passengers ride,
+     * they do not each get a go at the throttle. That is the one place where "the crew
+     * is a list" could quietly become "the truck moves twice as fast with two people
+     * in it", so it is worth saying out loud. */
+    for (const r of s.responders) {
+      const cmd = readCommand(input, r.prefix);
+      if (r.inVehicleId) {
+        const ap = s.apparatus.find((a) => a.id === r.inVehicleId);
+        if (ap && ap.driverId === r.id) {
+          const before = ap.odometerM;
+          events.push(...stepApparatusMovement(s, ap, cmd.drive, stepMs));
+          s.telemetry.distanceDrivenM += ap.odometerM - before;
+          s.telemetry.timeDrivingMs += stepMs;
+        }
+        if (ap) { r.x = ap.x; r.y = ap.y; r.facing = ap.angle; }
+      } else {
+        events.push(...stepPlayerMovement(s, cmd.axis, stepMs, cmd.aim, r));
+        s.telemetry.timeOnFootMs += stepMs;
+      }
+      events.push(...stepInteraction(s, cmd, stepMs, r));
     }
-
-    /* 2. hands */
-    events.push(...stepInteraction(s, cmd, stepMs));
 
     /* 3. the world, whether or not anyone is watching it */
     events.push(...stepHazards(s, stepMs, this.rng));
@@ -387,26 +420,54 @@ export class Game {
 
 function clamp01(v) { return Math.min(1, Math.max(0, v)); }
 
-function readCommand(input) {
+/** One responder's intent for one step. `prefix` selects that responder's key set —
+ *  the same shape a network client would send, which is the point of routing every
+ *  responder through here rather than reading the keyboard in the movement code. */
+function readCommand(input, prefix = '') {
+  const a = (name) => (prefix ? prefix + name[0].toUpperCase() + name.slice(1) : name);
   if (!input) {
     return { axis: { x: 0, y: 0 }, drive: { throttle: 0, steer: 0 }, aim: null, interact: false, drop: false, use: false, siren: false, slot: null };
   }
-  const axis = input.moveAxis();
+  const axis = input.moveAxis(prefix);
   let slot = null;
-  for (let i = 1; i <= 5; i++) if (input.wasPressed(`slot${i}`)) { slot = i - 1; break; }
+  for (let i = 1; i <= 5; i++) if (input.wasPressed(a(`slot${i}`))) { slot = i - 1; break; }
   return {
     axis,
     drive: {
-      throttle: (input.isDown('moveUp') ? 1 : 0) - (input.isDown('moveDown') ? 1 : 0),
-      steer: (input.isDown('moveRight') ? 1 : 0) - (input.isDown('moveLeft') ? 1 : 0),
+      throttle: (input.isDown(a('moveUp')) ? 1 : 0) - (input.isDown(a('moveDown')) ? 1 : 0),
+      steer: (input.isDown(a('moveRight')) ? 1 : 0) - (input.isDown(a('moveLeft')) ? 1 : 0),
     },
-    aim: input.pointerWorld || null,
-    interact: input.wasPressed('interact'),
-    drop: input.wasPressed('drop'),
-    use: input.isDown('use'),
-    siren: input.wasPressed('siren'),
+    // Only the first responder has the mouse; a second player on one keyboard aims by
+    // facing, which is what the widened stream cone exists for.
+    aim: prefix ? null : (input.pointerWorld || null),
+    interact: input.wasPressed(a('interact')),
+    drop: input.wasPressed(a('drop')),
+    use: input.isDown(a('use')),
+    siren: input.wasPressed(a('siren')),
     slot,
   };
+}
+
+/** Bring the second responder on or send them home. Drop-in, mid-shift. */
+export function toggleCoop(state) {
+  if (state.responders.length > 1) {
+    const gone = state.responders.pop();
+    // Never let someone leave holding the only nozzle, or dragging a patient.
+    for (const t of state.tools) if (t.carrier === gone.id) { t.carrier = null; t.x = gone.x; t.y = gone.y; }
+    for (const v of state.victims) if (v.draggedBy === gone.id) v.draggedBy = null;
+    for (const ap of state.apparatus) {
+      if (ap.driverId === gone.id) ap.driverId = null;
+      ap.passengerIds = ap.passengerIds.filter((id) => id !== gone.id);
+    }
+    state.coop = false;
+    return false;
+  }
+  const r = makeResponder(state.responders.length);
+  r.x = state.responders[0].x + 2.6;
+  r.y = state.responders[0].y;
+  state.responders.push(r);
+  state.coop = true;
+  return true;
 }
 
 /** A siren within earshot is what finally gets an occupant to leave the building. */

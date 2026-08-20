@@ -9,7 +9,8 @@
  */
 
 import { CONFIG } from './config.js';
-import { Game, MODES } from './game.js';
+import { Game, MODES, toggleCoop } from './game.js';
+import { radio } from './sim/dispatch.js';
 import { Input } from './core/input.js';
 import { Camera } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
@@ -62,6 +63,12 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Tab') { e.preventDefault(); hud.toggleExpanded(); }
   if (e.code === 'KeyR' && game.state.mode === MODES.PAUSED) { e.preventDefault(); startShift(); }
   if (e.code === 'KeyM') { e.preventDefault(); audio.toggleMute(); hud.setMuted(audio.muted); }
+  if (e.code === 'KeyP' && game.state.mode === MODES.PLAYING) {
+    e.preventDefault();
+    const on = toggleCoop(game.state);
+    radio(game.state, on ? 'Second volunteer signed on. Arrow keys, right shift, and /.'
+      : 'Second volunteer signed off.', 'system');
+  }
 });
 
 function startShift() {
@@ -80,9 +87,17 @@ function frame(now) {
 
   camera.resize(canvas);
 
-  // Zoom is a readability decision that changes with what you are doing: wide enough
-  // to plan a route from the cab, tight enough to lay a hose on foot.
-  const wanted = game.state.player.inVehicleId ? CONFIG.render.viewWidthM : CONFIG.render.viewWidthOnFootM;
+  /* Zoom is a readability decision that changes with what you are doing: wide enough
+     to plan a route from the cab, tight enough to lay a hose on foot — and in co-op,
+     wide enough that a partner who has wandered off is still on the screen rather than
+     an arrow at the edge of it. */
+  const crew = game.state.responders;
+  const anyDriving = crew.some((r) => r.inVehicleId);
+  let spread = 0;
+  for (const a of crew) for (const b of crew) spread = Math.max(spread, Math.hypot(a.x - b.x, a.y - b.y));
+  const wanted = Math.max(
+    anyDriving ? CONFIG.render.viewWidthM : CONFIG.render.viewWidthOnFootM,
+    spread * 1.9);
   if (Math.abs(camera.viewWidthM - wanted) > 0.2) {
     const k = 1 - Math.exp(-CONFIG.render.zoomLerp * Math.min(dt, 100) / 1000);
     camera.viewWidthM += (wanted - camera.viewWidthM) * k;
@@ -93,7 +108,10 @@ function frame(now) {
 
   // Presentation only. The camera eases on REAL time and keeps easing while paused; it
   // must never feed anything back into the simulation.
-  camera.follow(game.state.player.x, game.state.player.y, Math.min(dt, 100) / 1000);
+  // the camera watches the crew's centre of gravity, not one nominated person
+  let cx = 0, cy = 0;
+  for (const r of crew) { cx += r.x; cy += r.y; }
+  camera.follow(cx / crew.length, cy / crew.length, Math.min(dt, 100) / 1000);
 
   renderer.render(game.state, now);
   // Audio is the renderer's twin: same state, a different output device, and no more

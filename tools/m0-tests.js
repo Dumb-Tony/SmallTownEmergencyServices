@@ -477,7 +477,7 @@ lines.push('--- J. audio (the renderer\'s twin: reads state, owns nothing) ---')
   s.player.x = gas.x; s.player.y = gas.y;
   eq('J12 gas is silent with the wrong tool in your hands', mixFor(s).gasRate, 0);
   const meter = s.tools.find((t) => t.defId === 'gasmeter');
-  meter.carrier = 'player'; s.player.toolId = meter.id;
+  meter.carrier = s.player.id; s.player.toolId = meter.id;
   const atLeak = mixFor(s).gasRate;
   gt('J13 carrying the meter makes gas audible', atLeak, 1);
   s.player.x = gas.x + 8;
@@ -488,7 +488,7 @@ lines.push('--- J. audio (the renderer\'s twin: reads state, owns nothing) ---')
 
   // water and engine follow the same rule: they are readings, not flags set by hand
   const hose = s.tools.find((t) => t.defId === 'hose');
-  hose.carrier = 'player'; s.player.toolId = hose.id;
+  hose.carrier = s.player.id; s.player.toolId = hose.id;
   eq('J15 a hose that is not flowing is silent', mixFor(s).water, 0);
   hose.flowing = true;
   gt('J16 an open nozzle is not', mixFor(s).water, 0.5);

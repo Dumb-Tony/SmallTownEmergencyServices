@@ -130,3 +130,66 @@ very different numbers behind them.
 - `tools/_audiodiag.js` — 12 assertions on the plumbing in a real browser: the context
   builds, the voices exist and start silent, cues rate-limit, mute pulls the master down.
 - **283 assertions total.**
+
+## 2026-08-19 — Phase 5a: a crew of two, and a visual pass
+
+### The milestone: cooperative validation, the half that can be verified
+
+GDD Phase 5 is co-op. It splits cleanly into the architecture (several responders in
+one town, contending for one wheel, one nozzle, one patient) and the transport (netcode).
+The design risk is all in the first half, and unlike netcode it is testable here — so
+that is what this is. **Press `P` and a second volunteer signs on**, on the same
+keyboard: arrows, right shift, `/`, `.`, `,` and the numpad.
+
+`state.responders` is now a list. `state.player` is kept as the same *object* as
+`responders[0]` — not a copy — so single-responder call sites stay honest instead of
+quietly diverging. Every responder's intent goes through one `readCommand(input, prefix)`,
+which is the same seam a network client would take.
+
+Contention is a property of the seating and the hands, not a rule written down somewhere:
+
+- **One wheel.** First in drives; anyone after that rides. Two people in a cab do not
+  make it go twice as fast — asserted, because that is exactly the bug a "crew is a
+  list" refactor produces.
+- **One nozzle.** Tool ownership is a responder id, so it cannot be held twice.
+- **One patient.** `draggedBy` is a responder id for the same reason.
+- Signing off puts down whatever you were holding rather than orphaning it.
+
+The camera frames the crew's centre of gravity and widens to keep both on screen; the
+HUD shows two status lines, each in that responder's colour, and says who is at the wheel.
+
+**Bugs the co-op tests caught:** a patient already in someone's arms could be grabbed
+out of them (the victim stayed put while the first responder walked off "dragging"
+nobody), and the second crew member's interaction pass silenced the first one's nozzle
+every step.
+
+Still to do for Phase 5 proper: the network transport. The architecture is shaped for
+it — host-authoritative simulation, per-responder commands — but two browsers talking
+to each other is not something that can be verified from here, so it is not claimed.
+
+### The looks
+- **Fire lights the ground.** Warm pools under everything burning, drawn beneath the
+  things standing on it, plus embers riding the column.
+- **Windows glow when the room behind them is alight** — read straight off the fire's
+  own cells, so a shop with three lit windows on the north side has its fire on the
+  north side. It is the only way to see inside a building you are outside of.
+- Kerbs and lane markings, bay markings on the apron, parking bays in the lots,
+  deterministic grass patches and per-tree size variation.
+- Apparatus that read as vehicles: wheels, a cab and windscreen, a reflective chevron
+  band, and kit that identifies each truck without reading the label — a ladder on the
+  engine, a red cross on the ambulance, a locker roll-up on the rescue.
+- A lightbar that alternates red and blue and throws colour onto the road.
+- A vignette, and a dark contrast ring under every responder — **a yellow crew member
+  standing in a yellow fire was invisible**, and the one thing that must always be
+  findable on screen is the person you are controlling.
+
+**A real hang bug found while screenshotting:** the new grass texture stepped a fixed
+26 m grid across the visible area, which is an unbounded loop when the camera has no
+layout yet and the scale divides by zero. It hung the page hard enough that headless
+Chrome sat on a screenshot until it was killed. The step is now derived from the visible
+size and bounded to a 48×48 grid.
+
+### Test counts
+- `tools/m2-tests.js` section E — 21 assertions on co-op: seating, contention, signing
+  off cleanly, and a whole shift played by two bots at once through the real input path.
+- **304 assertions total** (m0 135 · m1 112 · m2 57).

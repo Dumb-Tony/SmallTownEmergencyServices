@@ -340,8 +340,9 @@ export function stepIncidents(state, dtMs, rng) {
 
 /** Anyone — on foot or in a cab — close enough to be working this call. */
 function crewNear(state, inc, radius = 28) {
-  const p = state.player;
-  if (!p.inVehicleId && dist(p.x, p.y, inc.x, inc.y) < radius) return true;
+  for (const r of state.responders) {
+    if (!r.inVehicleId && dist(r.x, r.y, inc.x, inc.y) < radius) return true;
+  }
   for (const a of state.apparatus) {
     if (dist(a.x, a.y, inc.x, inc.y) < radius) return true;
   }

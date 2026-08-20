@@ -20,8 +20,8 @@ import { hazardBlockAt, liveZoneAt } from './hazards.js';
  * @param {{x:number,y:number}} axis  normalised movement intent
  * @param {{x:number,y:number}|null} aim  world point the pointer is over, if any
  */
-export function stepPlayerMovement(state, axis, dtMs, aim = null) {
-  const p = state.player;
+export function stepPlayerMovement(state, axis, dtMs, aim = null, r = state.player) {
+  const p = r;
   const P = CONFIG.player;
   const dt = dtMs / 1000;
   const out = [];

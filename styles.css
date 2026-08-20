@@ -202,3 +202,10 @@ kbd {
   .card .keys { grid-template-columns: 1fr; }
   .card.report .grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── crew (local co-op) ───────────────────────────────────────────────────── */
+.who { font-weight: 700; font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; }
+.crewsep { display: inline-block; width: 1px; height: 14px; margin: 0 10px;
+           background: var(--line); vertical-align: middle; }
+.chip.dim { color: var(--dim); }
+.card .keys .coopkeys { grid-column: 1 / -1; color: var(--violet); }

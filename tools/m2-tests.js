@@ -11,11 +11,12 @@
  */
 
 import { CONFIG } from '../src/config.js';
-import { Game, MODES } from '../src/game.js';
+import { Game, MODES, toggleCoop } from '../src/game.js';
 import { clearSave, defaultTown } from '../src/core/persistence.js';
 import { openIncidents } from '../src/sim/incidentSim.js';
-import { victimHandled } from '../src/sim/victims.js';
-import { CrewBot, runBotShift, makeBotInput } from './_crewbot.js';
+import { stepInteraction, toolsInReachOf } from '../src/sim/interaction.js';
+import { victimHandled, createVictim } from '../src/sim/victims.js';
+import { CrewBot, runBotShift, makeBotInput, mergeBotInputs } from './_crewbot.js';
 
 /* ── harness ─────────────────────────────────────────────────────────────── */
 const lines = [];
@@ -25,6 +26,7 @@ function ok(name, cond, detail = '') {
   else { fails++; lines.push(`FAIL  ${name}${detail ? '  <- ' + detail : ''}`); }
 }
 const gt = (n, a, b) => ok(n, a > b, `got ${a}, want > ${b}`);
+const eq = (n, a, b) => ok(n, a === b, `got ${JSON.stringify(a)}, want ${JSON.stringify(b)}`);
 const STEP = CONFIG.sim.stepMs;
 
 let _pre = null;
@@ -57,6 +59,11 @@ function runIdleShift(seed, label) {
   g.clock.skipMs(CONFIG.shift.durationMs + 2000, (ms) => g.step(ms, null));
   return g;
 }
+
+const CMD = (over = {}) => ({
+  axis: { x: 0, y: 0 }, drive: { throttle: 0, steer: 0 }, aim: null,
+  interact: false, drop: false, use: false, siren: false, slot: null, ...over,
+});
 
 const SEEDS = [[9001, 'play_a'], [9002, 'play_b']];
 const runs = [];
@@ -197,7 +204,7 @@ for (const run of runs) {
   const eng = g.state.apparatus.find((a) => a.id === 'engine');
   g.state.player.x = eng.x; g.state.player.y = eng.y + 1.5;
   inp.tap('slot1'); g.step(STEP, inp);
-  const held = g.state.tools.find((t) => t.carrier === 'player');
+  const held = g.state.tools.find((t) => t.carrier === g.state.player.id);
   ok('D1 a tool can be taken', !!held);
   inp.tap('drop'); g.step(STEP, inp);
   ok('D2 and always put down again', g.state.player.toolId === null);
@@ -210,9 +217,112 @@ for (const run of runs) {
 emit(null);
 }
 
+/* ── E. two on the crew (GDD Phase 5) ────────────────────────────────────── */
+function sectionE() {
+lines.push('--- E. cooperative validation: two responders, one town ---');
+{
+  const g = freshGame(7101, 'coop');
+  const s = g.state;
+  eq('E1 a shift starts with one volunteer', s.responders.length, 1);
+  ok('E2 and state.player IS that responder, not a copy', s.player === s.responders[0]);
+
+  ok('E3 a partner can sign on mid-shift', toggleCoop(s) === true && s.responders.length === 2);
+  ok('E4 they are a different person with their own keys',
+    s.responders[1].id !== s.responders[0].id && s.responders[1].prefix === 'p2');
+
+  /* Contention. There is one wheel, one nozzle, one patient — and the design says
+   * those are contested by construction rather than by a rule. */
+  const [a, b] = s.responders;
+  const eng = s.apparatus.find((x) => x.id === 'engine');
+  a.x = eng.x; a.y = eng.y + 1.5;
+  b.x = eng.x; b.y = eng.y + 1.5;
+
+  stepInteraction(s, CMD({ interact: true }), STEP, a);
+  eq('E5 the first one in takes the wheel', eng.driverId, a.id);
+  stepInteraction(s, CMD({ interact: true }), STEP, b);
+  eq('E6 the second one rides instead of taking it', eng.driverId, a.id);
+  ok('E7 but they are aboard, not left behind', eng.passengerIds.includes(b.id) && b.inVehicleId === eng.id);
+
+  // only the driver's throttle moves the truck
+  const x0 = eng.x;
+  g.frame(200, mergeBotInputs([
+    (() => { const i = makeBotInput(''); i.hold('moveUp'); return i; })(),
+    (() => { const i = makeBotInput('p2'); i.hold('moveUp'); return i; })(),
+  ]));
+  const drivenBoth = eng.x - x0;
+  eng.x = x0; eng.speed = 0;
+  g.frame(200, mergeBotInputs([(() => { const i = makeBotInput(''); i.hold('moveUp'); return i; })()]));
+  const drivenOne = eng.x - x0;
+  ok('E8 two people in a cab do not drive it twice as fast',
+    Math.abs(drivenBoth - drivenOne) < 0.2, `${drivenBoth.toFixed(2)} vs ${drivenOne.toFixed(2)}`);
+
+  stepInteraction(s, CMD({ interact: true }), STEP, a);
+  eq('E9 the driver getting out frees the wheel', eng.driverId, null);
+  ok('E10 and the passenger is still aboard', b.inVehicleId === eng.id);
+}
+{
+  const g = freshGame(7102, 'coop2');
+  const s = g.state;
+  toggleCoop(s);
+  const [a, b] = s.responders;
+  const eng = s.apparatus.find((x) => x.id === 'engine');
+  a.x = eng.x; a.y = eng.y + 1.5; b.x = eng.x; b.y = eng.y + 1.5;
+
+  // one nozzle
+  const hose = s.tools.find((t) => t.defId === 'hose');
+  const slotOf = (who, defId) =>
+    toolsInReachOf(s, who.x, who.y).findIndex((q) => q.tool.defId === defId);
+  stepInteraction(s, CMD({ slot: slotOf(a, 'hose') }), STEP, a);
+  eq('E11 one of them takes the line', hose.carrier, a.id);
+  const before = hose.carrier;
+  const slot = slotOf(b, 'hose');
+  if (slot >= 0) stepInteraction(s, CMD({ slot }), STEP, b);
+  eq('E12 the other cannot take it out of their hands', hose.carrier, before);
+
+  // one patient
+  const v = createVictim({ incidentId: 'x', x: a.x + 1, y: a.y, severity: 'injured' });
+  s.victims.push(v);
+  stepInteraction(s, CMD({ interact: true }), STEP, b);
+  eq('E13 a free hand can take hold of a patient', v.draggedBy, b.id);
+  stepInteraction(s, CMD({ interact: true }), STEP, a);
+  eq('E14 and the other cannot take the same patient', v.draggedBy, b.id);
+
+  // signing off must not strand anything
+  toggleCoop(s);
+  eq('E15 signing off leaves one responder', s.responders.length, 1);
+  eq('E16 the patient they were carrying is put down, not orphaned', v.draggedBy, null);
+  ok('E17 nothing is left carried by a responder who no longer exists',
+    s.tools.every((t) => t.carrier === null || t.carrier === 'rack' ||
+      s.apparatus.some((ap) => ap.id === t.carrier) ||
+      s.responders.some((r) => r.id === t.carrier)));
+}
+{
+  // Two bots, one town, whole shift: the composition test rather than the unit test.
+  const g = freshGame(7103, 'coopshift', false);
+  toggleCoop(g.state);
+  const bots = [new CrewBot(g, 'r1'), new CrewBot(g, 'r2')];
+  const step = CONFIG.sim.stepMs;
+  for (let t = 0; t < CONFIG.shift.durationMs + 2000; t += step) {
+    for (const bot of bots) bot.think();
+    g.frame(step, mergeBotInputs(bots.map((x) => x.input)));
+    if (g.state.mode !== MODES.PLAYING) break;
+  }
+  const s = g.state;
+  lines.push(`    two-crew shift: ${s.incidents.length} calls · ${s.outcome.controlled} controlled · ` +
+    `${s.outcome.lost} lost · ${(s.telemetry.distanceDrivenM / 1000).toFixed(2)} km · ` +
+    `${Math.round(s.telemetry.litresUsed)} L`);
+  eq('E18 a two-crew shift runs to the end', s.mode, MODES.REPORT);
+  gt('E19 both volunteers did something', bots.filter((x) => x.actions.entries > 0).length, 1);
+  gt('E20 and the crew closed calls', s.outcome.controlled, 0);
+  ok('E21 neither of them ended up wedged off the map',
+    s.responders.every((r) => r.x > 0 && r.x < CONFIG.world.widthM && r.y > 0 && r.y < CONFIG.world.heightM));
+}
+emit(null);
+}
+
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
-  sectionA(); sectionB(); sectionC(); sectionD();
+  sectionA(); sectionB(); sectionC(); sectionD(); sectionE();
   lines.push('');
   lines.push('--- bot log, first shift (abridged) ---');
   for (const l of (runs[0] ? runs[0].bot.log.slice(0, 26) : [])) lines.push(`    ${l}`);
