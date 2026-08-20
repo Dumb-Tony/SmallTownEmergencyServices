@@ -15,6 +15,8 @@ param(
   [string]$Tests = "tools\m0-tests.js",
   [string]$Game  = "index.html",
   [int]$Port     = 8399,
+  [int]$Width    = 1280,
+  [int]$Height   = 720,
   [switch]$Keep
 )
 $ErrorActionPreference = "Stop"
@@ -63,7 +65,7 @@ $profileDir = Join-Path $env:TEMP ("stes-smoke-" + [System.Guid]::NewGuid().ToSt
 $domFile    = Join-Path $env:TEMP ("stes-dom-"   + [System.Guid]::NewGuid().ToString("N").Substring(0,8) + ".html")
 $proc = Start-Process $chrome -ArgumentList `
   "--headless=new","--disable-gpu","--no-first-run","--no-default-browser-check",
-  "--user-data-dir=$profileDir","--window-size=1280,720",
+  "--user-data-dir=$profileDir","--window-size=$Width,$Height",
   "--autoplay-policy=no-user-gesture-required",
   "--virtual-time-budget=600000","--dump-dom",$url `
   -RedirectStandardOutput $domFile -NoNewWindow -Wait -PassThru

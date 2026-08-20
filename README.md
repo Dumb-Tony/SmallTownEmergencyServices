@@ -61,6 +61,17 @@ The second responder drives with the **arrows**, and uses `RShift` (interact), `
 are theirs alone — a control that does something different depending on who else is on
 shift is worse than no control.
 
+## On a phone
+
+Open the link on a phone and the game builds a stick, four verb buttons and an equipment
+row, and tightens the camera to suit the screen. It is the same game: a thumb produces
+the same ACTIONS a key does — `interact`, `use`, `drop`, `siren`, `slotN` — through the
+input layer, so the simulation, the bot and the netcode cannot tell the difference. The
+stick is the one thing the keyboard cannot do: it is analogue, so you can ease a truck
+around a corner instead of steering in eighths.
+
+![The same shift on a phone: stick, verb buttons, equipment row](docs/m6-phone.png)
+
 ## Two of you
 
 Press `P` and a partner signs on mid-shift. There is one wheel, one nozzle and one
@@ -190,6 +201,11 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
 - `tools/m1-tests.js` — the systems: fire spread and suppression, water supply, gas
   ignition chains, live lines, blockage, patients, dispatch pacing, incident lifecycle,
   and the GDD's signature-scenario acceptance test.
+- `tools/m6-tests.js` — touch. That a thumb and a key are the same thing all the way
+  down, that a tap cannot get stuck held, that the stick drives as well as walks, and
+  that a phone gets a readable number of pixels per metre. `tools/_layoutdiag.js`
+  measures the HUD against the viewport at any size — run it with
+  `-Width 390 -Height 844` — and reports overflow and any panel sitting under a thumb.
 - `tools/m5-tests.js` — does it play? The GDD's own question, asserted: the medical
   chain completes end to end in a real bot shift, a call closes when the scene is clear,
   and two volunteers measurably beat one (GDD Phase 5's exit gate). `tools/_playdiag.js`
@@ -214,7 +230,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**487 assertions.**
+**529 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 

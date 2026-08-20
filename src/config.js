@@ -33,6 +33,11 @@ export const CONFIG = {
     // screenshot came back as one building filling the screen, with no street in it.
     viewWidthM: 165,
     viewWidthOnFootM: 104, // zoom in out of the cab, but never so far that the street goes
+
+    /* A hand-held screen holds a pixels-per-metre target instead, because the same
+       metres budget on a 390 px phone makes a person two pixels wide. */
+    phonePxPerM: 6.5,
+    phonePxPerMOnFoot: 9.5,
     followLerp: 5,
     fitPaddingM: 6,
     maxPixelRatio: 2,

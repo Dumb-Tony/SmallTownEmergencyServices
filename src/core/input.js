@@ -56,6 +56,10 @@ export class Input {
     this.setBindings(bindings);
 
     this._down = new Set();      // codes physically held
+    this._vDown = new Set();     // ACTIONS held by a thumb (see the virtual layer)
+    this._vPressed = new Set();
+    this._vTapped = new Set();
+    this._vAxis = null;
     this._pressed = new Set();   // codes that went down since the last endStep()
     this._released = new Set();
     // `seen` stays false until the player actually moves the mouse, so keyboard-only
@@ -118,7 +122,20 @@ export class Input {
     this._bound.length = 0;
   }
 
+  /* ── the virtual layer ──────────────────────────────────────────────────────
+   * A thumb on a screen produces ACTIONS, exactly as a key does, so touch controls
+   * plug in here rather than anywhere near the simulation. Nothing downstream — not
+   * game.js, not the bot, not the netcode — can tell the difference, which is the whole
+   * reason the input layer speaks in actions instead of key codes (GDD §16.6).
+   */
+  holdVirtual(action) { this._vDown.add(action); }
+  releaseVirtual(action) { this._vDown.delete(action); }
+  tapVirtual(action) { this._vPressed.add(action); this._vDown.add(action); this._vTapped.add(action); }
+  /** An analogue stick, which a keyboard cannot give you. null hands movement back. */
+  setVirtualAxis(axis) { this._vAxis = axis; }
+
   isDown(action) {
+    if (this._vDown.has(action)) return true;
     const codes = this.bindings[action];
     if (!codes) return false;
     for (const c of codes) if (this._down.has(c)) return true;
@@ -126,6 +143,7 @@ export class Input {
   }
 
   wasPressed(action) {
+    if (this._vPressed.has(action)) return true;
     const codes = this.bindings[action];
     if (!codes) return false;
     for (const c of codes) if (this._pressed.has(c)) return true;
@@ -144,6 +162,9 @@ export class Input {
    * @param {string} prefix  '' for the first responder, 'p2' for the second
    */
   moveAxis(prefix = '') {
+    // A stick is analogue and already normalised; it belongs to the first responder,
+    // because there is one pair of thumbs on a phone.
+    if (!prefix && this._vAxis) return { x: this._vAxis.x, y: this._vAxis.y };
     const a = (n) => (prefix ? prefix + n[0].toUpperCase() + n.slice(1) : n);
     let x = (this.isDown(a('moveRight')) ? 1 : 0) - (this.isDown(a('moveLeft')) ? 1 : 0);
     let y = (this.isDown(a('moveDown')) ? 1 : 0) - (this.isDown(a('moveUp')) ? 1 : 0);
@@ -151,11 +172,28 @@ export class Input {
     return { x, y };
   }
 
-  /** Clear the per-step edge sets. Called once per fixed simulation step. */
-  endStep() { this._pressed.clear(); this._released.clear(); }
+  /**
+   * Clear the per-step edge sets. Called once per fixed simulation step.
+   *
+   * A TAP releases on the step that consumed it. A finger cannot be trusted to produce
+   * a pointerup for every pointerdown — it leaves the element, the browser steals the
+   * gesture, the page scrolls — and a stuck virtual key is a responder walking into a
+   * wall forever with nothing the player can press to stop it.
+   */
+  endStep() {
+    this._pressed.clear();
+    this._released.clear();
+    this._vPressed.clear();
+    for (const a of this._vTapped) this._vDown.delete(a);
+    this._vTapped.clear();
+  }
 
   /** Drop all held state (focus loss, restart). */
-  clear() { this._down.clear(); this._pressed.clear(); this._released.clear(); }
+  clear() {
+    this._down.clear(); this._pressed.clear(); this._released.clear();
+    this._vDown.clear(); this._vPressed.clear(); this._vTapped.clear();
+    this._vAxis = null;
+  }
 
   /** Test hook: synthesise input without a real keyboard. */
   _debugPress(code)   { this._down.add(code); this._pressed.add(code); }

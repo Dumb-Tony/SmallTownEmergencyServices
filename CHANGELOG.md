@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-08-20 — it plays on a phone
+
+The whole point of this project is a link you send to a friend, and half the people you
+send a link to open it on a phone. They got a town they could look at and not play.
+
+- **A virtual input layer.** A thumb produces ACTIONS — `interact`, `use`, `drop`,
+  `siren`, `slotN` — through the same `Input` the keyboard goes through, so the
+  simulation, the crew bot and the netcode cannot tell a thumb from a key. That is the
+  payoff for an input layer that speaks in actions instead of key codes.
+- **A stick, four verb buttons and an equipment row** that mirrors the HUD's numbered
+  slots, because a phone has no number keys. The stick is analogue — the one thing the
+  keyboard cannot express — so a phone player can ease a truck round a corner instead of
+  steering in eighths.
+- **A tap releases on the step that consumes it.** A finger cannot be relied on to send
+  a pointerup: it slides off the button, the browser steals the gesture, the page
+  scrolls. A stuck virtual key is a responder walking into a wall forever with nothing
+  to press to stop it.
+- **Driving fell back to the axis.** `readCommand` derived throttle and steering from
+  the four movement ACTIONS, which a stick never presses — so a phone player could walk
+  anywhere in town and then sit in a cab that would not steer. Keys still win when they
+  are down, so keyboard driving is unchanged to the bit.
+- **The camera holds a pixels-per-metre target on small screens** instead of a metres
+  budget. 165 m across a 390 px phone is 2.4 px/m: a person is two pixels and a hydrant
+  is one. It is 6.5 px/m now, and 9.5 on foot.
+- **A layout that fits.** `tools/_layoutdiag.js` measures every panel against the
+  viewport and reports overflow and overlap: it found the radio log sitting under the
+  thumb buttons (172 × 59 px) and the prompt sitting on the stick, and it found that a
+  landscape phone at 722 px wide skipped the mobile layout entirely while still having
+  touch controls. All three fixed and re-measured at four device sizes.
+
+`tools/m6-tests.js` — 42 assertions, 529 in total. `tools/smoketest.ps1` takes
+`-Width`/`-Height` now, so a suite can be run at a phone's viewport.
+
+
 ## 2026-08-20 — the medical family closes
 
 Following the previous milestone's measurement: medical calls were being worked 4 times

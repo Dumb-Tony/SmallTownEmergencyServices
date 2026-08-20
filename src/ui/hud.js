@@ -28,6 +28,7 @@ export class Hud {
     this.onJoin = null;
     this.onLeaveNet = null;
     this.netStatus = 'offline';
+    this.lastSlots = [];
     this._lastRadioLen = -1;
     this.build();
   }
@@ -275,8 +276,15 @@ export class Hud {
     }
     this.el.prompt.innerHTML = parts.join('&nbsp;&nbsp;·&nbsp;&nbsp;') || '<span class="dim">Nothing in reach.</span>';
 
-    if (me.inVehicleId) { this.el.slots.innerHTML = '<span class="dim">You are in the cab.</span>'; return; }
+    if (me.inVehicleId) {
+      this.el.slots.innerHTML = '<span class="dim">You are in the cab.</span>';
+      this.lastSlots = [];
+      return;
+    }
     const avail = toolsInReachOf(s, me.x, me.y).slice(0, 5);
+    // The same list, in the same order, for whatever else wants to show it — the phone's
+    // equipment row has no number keys to mirror, so it mirrors this instead.
+    this.lastSlots = avail.map((a) => ({ short: a.tool.short, name: a.tool.name, from: a.from }));
     this.el.slots.innerHTML = avail.length
       ? avail.map((a, i) => `<span class="slot"><kbd>${i + 1}</kbd> ${a.tool.name}<em>${a.from}</em></span>`).join('')
       : '<span class="dim">No kit within reach.</span>';

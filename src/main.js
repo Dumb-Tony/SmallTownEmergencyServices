@@ -18,6 +18,7 @@ import { Hud } from './ui/hud.js';
 import { DebugOverlay } from './dev/debugOverlay.js';
 import { GameAudio } from './audio/audio.js';
 import { NetSession, ROLE } from './net/net.js';
+import { TouchControls, looksLikeTouch } from './ui/touch.js';
 import { WORLD } from './data/town.js';
 
 const canvas = document.getElementById('stage');
@@ -41,6 +42,8 @@ const input = new Input(window).attach();
 const hud = new Hud(uiRoot, game);
 const debug = new DebugOverlay(uiRoot, game, renderer);
 const audio = new GameAudio();
+const touch = new TouchControls(uiRoot, input);
+if (looksLikeTouch()) touch.enable();
 const net = new NetSession(game);
 net.onStatus = (st) => hud.setNetStatus(st, net);
 
@@ -117,8 +120,11 @@ function frame(now) {
   const anyDriving = crew.some((r) => r.inVehicleId);
   let spread = 0;
   for (const a of crew) for (const b of crew) spread = Math.max(spread, Math.hypot(a.x - b.x, a.y - b.y));
+  /* The readability budget scales with the screen. 165 m across a 390 px phone is
+     2.4 px/m — a person is two pixels and a street sign is nothing — so a hand-held
+     device gets a proportionally tighter view rather than the same one shrunk. */
   const wanted = Math.max(
-    anyDriving ? CONFIG.render.viewWidthM : CONFIG.render.viewWidthOnFootM,
+    TouchControls.viewWidthFor(camera.cssW, anyDriving),
     spread * 1.9);
   if (Math.abs(camera.viewWidthM - wanted) > 0.2) {
     const k = 1 - Math.exp(-CONFIG.render.zoomLerp * Math.min(dt, 100) / 1000);
@@ -160,6 +166,8 @@ function frame(now) {
   if (game.state.mode === MODES.PLAYING) audio.update(game.state, Math.min(dt, 100));
   else audio.hush();
   hud.update();
+  // the phone's equipment row mirrors the HUD's numbered slots: same list, same order
+  if (touch.enabled) touch.setSlots(hud.lastSlots || []);
   debug.update(dt);
 
   requestAnimationFrame(frame);
@@ -168,4 +176,4 @@ requestAnimationFrame(frame);
 
 /* Test and debug handle. The smoke-test harness drives these real objects rather than
    reaching into module scope. */
-window.__STES = { game, camera, renderer, hud, debug, input, audio, net, CONFIG, startShift, frame };
+window.__STES = { game, camera, renderer, hud, debug, input, audio, net, touch, CONFIG, startShift, frame };

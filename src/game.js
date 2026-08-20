@@ -476,11 +476,20 @@ export function readCommand(input, prefix = '') {
   const axis = input.moveAxis(prefix);
   let slot = null;
   for (let i = 1; i <= 5; i++) if (input.wasPressed(a(`slot${i}`))) { slot = i - 1; break; }
+
+  /* Driving falls back to the AXIS when no key is down.
+   *
+   * Keys win when they are pressed, so keyboard driving is unchanged to the bit. But a
+   * thumb on a stick presses no key at all, and without this a phone player could walk
+   * anywhere in town and then sit in a cab that would not steer. The stick is analogue,
+   * so it also gets something the keyboard cannot give: part-lock, part-throttle. */
+  const keyThrottle = (input.isDown(a('moveUp')) ? 1 : 0) - (input.isDown(a('moveDown')) ? 1 : 0);
+  const keySteer = (input.isDown(a('moveRight')) ? 1 : 0) - (input.isDown(a('moveLeft')) ? 1 : 0);
   return {
     axis,
     drive: {
-      throttle: (input.isDown(a('moveUp')) ? 1 : 0) - (input.isDown(a('moveDown')) ? 1 : 0),
-      steer: (input.isDown(a('moveRight')) ? 1 : 0) - (input.isDown(a('moveLeft')) ? 1 : 0),
+      throttle: keyThrottle || -axis.y,
+      steer: keySteer || axis.x,
     },
     // Only the first responder has the mouse; a second player on one keyboard aims by
     // facing, which is what the widened stream cone exists for.

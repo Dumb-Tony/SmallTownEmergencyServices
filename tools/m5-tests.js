@@ -183,48 +183,56 @@ function runShift(seed, crew) {
 }
 
 const SEEDS = [101, 303];
-const solo = SEEDS.map((s) => runShift(s, 1));
-const pair = SEEDS.map((s) => runShift(s, 2));
 const sum = (rs, f) => rs.reduce((n, r) => n + f(r), 0);
+
+/* Played LAZILY, on first use.
+ *
+ * These four whole shifts used to run at module scope, before the try/catch and before
+ * any section had emitted. When the harness's clock ran out during them the page had
+ * produced nothing at all, and the runner reported "the page probably crashed" for a
+ * suite that was simply still playing. Nothing is computed until a section asks. */
+let _solo = null, _pair = null;
+const solo = () => (_solo || (_solo = SEEDS.map((s) => runShift(s, 1))));
+const pair = () => (_pair || (_pair = SEEDS.map((s) => runShift(s, 2))));
 
 function sectionC() {
 lines.push('--- C. the medical chain, in a real shift, through the real input path ---');
   for (let i = 0; i < SEEDS.length; i++) {
-    const c = pair[i].chain;
+    const c = pair()[i].chain;
     lines.push(`      seed ${SEEDS[i]}, two crew: reached ${c.reached} · treated ${c.treated} · ` +
       `loaded ${c.loaded} · delivered ${c.delivered} · lost ${c.lost}`);
   }
-  gt('C1 somebody is reached', sum(pair, (r) => r.chain.reached), 0);
-  gt('C2 somebody is treated', sum(pair, (r) => r.chain.treated), 0);
-  gt('C3 somebody is loaded into the ambulance', sum(pair, (r) => r.chain.loaded), 0);
-  gt('C4 and somebody reaches the clinic alive', sum(pair, (r) => r.chain.delivered), 0);
+  gt('C1 somebody is reached', sum(pair(), (r) => r.chain.reached), 0);
+  gt('C2 somebody is treated', sum(pair(), (r) => r.chain.treated), 0);
+  gt('C3 somebody is loaded into the ambulance', sum(pair(), (r) => r.chain.loaded), 0);
+  gt('C4 and somebody reaches the clinic alive', sum(pair(), (r) => r.chain.delivered), 0);
   ok('C5 the family is closeable: a crash or a medical call was controlled',
-    [...solo, ...pair].some((r) => r.families.includes('crash') || r.families.includes('medical')),
-    [...solo, ...pair].flatMap((r) => r.families).join(','));
+    [...solo(), ...pair()].some((r) => r.families.includes('crash') || r.families.includes('medical')),
+    [...solo(), ...pair()].flatMap((r) => r.families).join(','));
 }
 
 /* ── D. GDD Phase 5 exit gate: coordination improves outcomes ────────────── */
 function sectionD() {
 lines.push('--- D. two of you must be better than one of you (Phase 5 exit gate) ---');
-  const soloConf = sum(solo, (r) => r.confidence);
-  const pairConf = sum(pair, (r) => r.confidence);
+  const soloConf = sum(solo(), (r) => r.confidence);
+  const pairConf = sum(pair(), (r) => r.confidence);
   lines.push(`      confidence ${(soloConf * 100).toFixed(0)}% -> ${(pairConf * 100).toFixed(0)}% (pooled over ${SEEDS.length} seeds)`);
-  lines.push(`      casualties reached ${sum(solo, (r) => r.chain.reached)} -> ${sum(pair, (r) => r.chain.reached)}` +
-    ` · lost ${sum(solo, (r) => r.chain.lost)} -> ${sum(pair, (r) => r.chain.lost)}` +
-    ` · calls never worked ${sum(solo, (r) => r.neverWorked)} -> ${sum(pair, (r) => r.neverWorked)}`);
+  lines.push(`      casualties reached ${sum(solo(), (r) => r.chain.reached)} -> ${sum(pair(), (r) => r.chain.reached)}` +
+    ` · lost ${sum(solo(), (r) => r.chain.lost)} -> ${sum(pair(), (r) => r.chain.lost)}` +
+    ` · calls never worked ${sum(solo(), (r) => r.neverWorked)} -> ${sum(pair(), (r) => r.neverWorked)}`);
 
   gt('D1 the town ends happier with a second volunteer', pairConf, soloConf);
-  gte('D2 more casualties are physically reached', sum(pair, (r) => r.chain.reached), sum(solo, (r) => r.chain.reached));
-  ok('D3 fewer of them are lost', sum(pair, (r) => r.chain.lost) <= sum(solo, (r) => r.chain.lost),
-    `${sum(pair, (r) => r.chain.lost)} vs ${sum(solo, (r) => r.chain.lost)}`);
+  gte('D2 more casualties are physically reached', sum(pair(), (r) => r.chain.reached), sum(solo(), (r) => r.chain.reached));
+  ok('D3 fewer of them are lost', sum(pair(), (r) => r.chain.lost) <= sum(solo(), (r) => r.chain.lost),
+    `${sum(pair(), (r) => r.chain.lost)} vs ${sum(solo(), (r) => r.chain.lost)}`);
   ok('D4 fewer calls go completely unattended',
-    sum(pair, (r) => r.neverWorked) <= sum(solo, (r) => r.neverWorked),
-    `${sum(pair, (r) => r.neverWorked)} vs ${sum(solo, (r) => r.neverWorked)}`);
+    sum(pair(), (r) => r.neverWorked) <= sum(solo(), (r) => r.neverWorked),
+    `${sum(pair(), (r) => r.neverWorked)} vs ${sum(solo(), (r) => r.neverWorked)}`);
 
   /* And the other half of the gate: "miscommunication creates recoverable stories".
      Losing calls has to stay normal, and the shift has to carry on regardless. */
-  gt('D5 calls are still lost, with two of you — the town does not wait', sum(pair, (r) => r.lost), 0);
-  ok('D6 and every shift still ran to the end', [...solo, ...pair].every((r) => r.controlled + r.lost > 0));
+  gt('D5 calls are still lost, with two of you — the town does not wait', sum(pair(), (r) => r.lost), 0);
+  ok('D6 and every shift still ran to the end', [...solo(), ...pair()].every((r) => r.controlled + r.lost > 0));
 }
 
 /* ── E. every medical template has a way to close ────────────────────────── */
@@ -279,8 +287,14 @@ lines.push('--- E. the five families include medicine, so medicine has to close 
 
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
-  sectionA(); sectionB(); sectionC(); sectionD(); sectionE();
-  emit(null);
+  /* Emit after EVERY section. These sections play whole shifts, and a run that gets cut
+     short — Chrome's virtual-time budget, a killed process — used to report nothing at
+     all, which reads as a crash rather than as "it got this far". */
+  sectionA(); emit(null);
+  sectionB(); emit(null);
+  sectionC(); emit(null);
+  sectionD(); emit(null);
+  sectionE(); emit(null);
 } catch (err) {
   fails++;
   lines.push(`FAIL  suite threw: ${err && err.message}`);

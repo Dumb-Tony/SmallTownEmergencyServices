@@ -20,6 +20,8 @@
 * { box-sizing: border-box; }
 
 html, body {
+  overscroll-behavior: none;   /* pull-to-refresh must not fire mid-shift on a phone */
+  touch-action: none;
   margin: 0; padding: 0; height: 100%; overflow: hidden;
   background: #10121a; color: var(--paper);
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -224,3 +226,77 @@ kbd {
 #netchip{cursor:pointer;letter-spacing:.08em}
 #netchip.live{color:#8ff0b0;border-color:#2f6b46}
 #netchip.warn{color:#ffc9a8;border-color:#7a4a2a}
+
+/* ── touch controls ────────────────────────────────────────────────────────
+   Only built when the device looks like a phone (src/ui/touch.js). Sized in vmin so a
+   thumb finds them on a 5" screen and a 12" one, and pinned clear of the HUD panels. */
+#touch { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+#touch button, #stick { pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
+
+#stick {
+  position: fixed; left: 3.5vmin; bottom: 3.5vmin;
+  width: 30vmin; height: 30vmin; max-width: 168px; max-height: 168px;
+  border-radius: 50%; background: rgba(10,16,22,0.42);
+  border: 2px solid rgba(150,190,220,0.35);
+  display: grid; place-items: center;
+}
+#stick i {
+  width: 42%; height: 42%; border-radius: 50%;
+  background: rgba(200,225,245,0.55); border: 2px solid rgba(255,255,255,0.5);
+  transition: transform 60ms linear;
+}
+
+#tbuttons {
+  position: fixed; right: 3.5vmin; bottom: 3.5vmin;
+  display: grid; grid-template-columns: repeat(2, min-content); gap: 2.2vmin;
+  box-sizing: border-box; max-width: 46vw;
+}
+.tbtn {
+  width: 16vmin; height: 16vmin; max-width: 92px; max-height: 92px;
+  border-radius: 50%; border: 2px solid rgba(150,190,220,0.4);
+  background: rgba(12,20,28,0.55); color: #eaf4ff;
+  display: grid; place-items: center; line-height: 1.05;
+  font: 700 4vmin/1 system-ui, sans-serif;
+}
+.tbtn span { font-size: 2.1vmin; font-weight: 600; opacity: 0.65; }
+.tbtn.on { background: rgba(90,166,200,0.55); border-color: #9fd8ef; }
+.tbtn.primary { background: rgba(28,64,40,0.6); border-color: rgba(140,220,160,0.5); }
+.tbtn.use { background: rgba(70,40,20,0.6); border-color: rgba(240,180,110,0.55); }
+
+#tslots {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 2.4vmin;
+  display: flex; gap: 1.4vmin; flex-wrap: wrap; justify-content: center; max-width: 46vw;
+}
+.tslot {
+  pointer-events: auto; touch-action: none;
+  padding: 1.4vmin 2.2vmin; border-radius: 8px;
+  border: 1px solid rgba(150,190,220,0.4); background: rgba(12,20,28,0.6);
+  color: #ffe9b0; font: 700 2.6vmin/1 system-ui, sans-serif;
+}
+.tslot.on { background: rgba(90,166,200,0.6); color: #fff; }
+
+/* ── small screens ─────────────────────────────────────────────────────────
+   The HUD was laid out for a desktop window. On a phone the dispatch panel alone would
+   cover a third of the town, so the panels shrink, the radio log keeps two lines, and
+   the bottom prompt gets out of the way of the thumbs. */
+@media (max-width: 700px), (max-height: 480px) {
+  #topbar { gap: 4px; padding: 5px 6px; font-size: 11px; flex-wrap: wrap; }
+  #topbar .pill { padding: 3px 7px; font-size: 11px; }
+  #calls { max-width: 52vw; width: auto; right: 6px; box-sizing: border-box; font-size: 11px; top: 42px; }
+  #calls.expanded { width: auto; max-width: 62vw; }
+  #calls li { padding: 4px 6px; }
+  #calls:not(.expanded) li:nth-child(n+3) { display: none; }
+  /* Clear of the thumbs. Measured with tools_layoutdiag.js: at 504x748 the radio log
+     overlapped the button cluster by 172 x 59 px and the prompt sat on the stick. */
+  #radio { max-width: 46vw; width: auto; right: 6px; box-sizing: border-box; font-size: 10px; bottom: 40vmin; }
+  #radio div:nth-child(n+3) { display: none; }
+  #bottom {
+    top: 76px; bottom: auto; left: 8px; right: auto;
+    max-width: 46vw; font-size: 11px; padding: 0;
+  }
+  #slots { display: none; }             /* the touch row replaces it */
+  #overlay .card { padding: 16px; max-width: 92vw; }
+  #overlay h1 { font-size: 20px; }
+  #overlay .keys { display: none; }     /* the controls ARE on screen on a phone */
+  #netrow { flex-wrap: wrap; }
+}
