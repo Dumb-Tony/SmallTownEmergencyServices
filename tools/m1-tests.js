@@ -546,8 +546,15 @@ lines.push('--- I. the next shift starts in the town you left ---');
   ok('I2 a gutted building is boarded up', next.buildings.pizza.boardedShifts > 0);
   eq('I3 boarded damage does not quietly repair', next.buildings.pizza.damage, 0.85);
   eq('I4 the struck hydrant is still out', next.hydrants.hyd_elm.damaged, true);
-  eq('I5 confidence carries over', next.confidence, 0.4);
-  ok('I6 the headline is kept', next.history[0].includes('Pizza'));
+  /* Confidence carries over, and fades a quarter of the way toward neutral overnight.
+     It used to carry exactly, which measured over five consecutive shifts meant a town
+     that reached zero stayed there for good — see tools\m8-tests.js section B. */
+  ok('I5 confidence carries over, warmed slightly by a night',
+    next.confidence > 0.4 && next.confidence < 0.4 + (CONFIG.town.startConfidence - 0.4),
+    `${next.confidence}`);
+  ok('I6 and it is still much nearer where you left it than neutral',
+    Math.abs(next.confidence - 0.4) < Math.abs(next.confidence - CONFIG.town.startConfidence));
+  ok('I7 the headline is kept', next.history[0].includes('Pizza'));
 
   // and a boarded-up shop is not where the next kitchen fire happens
   const g = fresh(5, 'boarded');
@@ -559,7 +566,7 @@ lines.push('--- I. the next shift starts in the town you left ---');
     if (inc && inc.buildingId === 'pizza') placedInBoarded++;
     if (inc) { inc.status = 'controlled'; }        // free the site up again
   }
-  eq('I7 nobody is cooking in a boarded-up shop', placedInBoarded, 0);
+  eq('I8 nobody is cooking in a boarded-up shop', placedInBoarded, 0);
 }
 emit('running I');
 }

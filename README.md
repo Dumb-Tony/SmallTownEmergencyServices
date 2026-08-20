@@ -216,6 +216,10 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
 - `tools/m1-tests.js` — the systems: fire spread and suppression, water supply, gas
   ignition chains, live lines, blockage, patients, dispatch pacing, incident lifecycle,
   and the GDD's signature-scenario acceptance test.
+- `tools/m8-tests.js` — the town you come back to. Five shifts back to back found three
+  things no single shift could: confidence that could only fall, a headline that
+  reported an old ruin as today's news, and a saturated town that ran out of places to
+  have an emergency. `tools/_campaigndiag.js` is the run that found them.
 - `tools/m7-tests.js` — the coach. What it says at each point of a response, that it
   retires each lesson the first time the player does the thing, that a corrupt save
   cannot silence it with invented lessons, and — the one that matters — that fifty hints
@@ -250,7 +254,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**595 assertions.**
+**618 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 

@@ -217,10 +217,14 @@ export const CONFIG = {
   /* ── consequence ────────────────────────────────────────────────────────── */
   town: {
     startConfidence: 0.62,
-    confidenceControlled: 0.045,
-    confidenceLost: -0.085,
+    confidenceControlled: 0.055,
+    /* Measured: a working crew closes 1-2 of 7 and loses the rest, which at -0.085 a
+       loss put the town at zero by shift three and kept it there for good. Losing still
+       costs more than a single save pays; it just is not a one-way trip any more. */
+    confidenceLost: -0.045,
+    confidenceFadePerShift: 0.25,   // how much of the gap to neutral a night closes
     confidencePatientSaved: 0.055,
-    confidencePatientLost: -0.11,
+    confidencePatientLost: -0.075,
     confidenceStructureLost: -0.06,
     repairShifts: 3,           // shifts a gutted building stays boarded up
   },

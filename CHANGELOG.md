@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-08-20 — the town you come back to
+
+GDD Phase 4's gate is "players care about a previous mistake", which needs the town to
+still be worth caring about on shift five. Every part of the carry-over was already
+unit-asserted; nobody had watched them COMPOUND. Five shifts back to back
+(`tools/_campaigndiag.js`) found three things, none of which one shift can show.
+
+- **Confidence could only ever fall.** A lost call cost nearly twice what a controlled
+  one paid, and a shift is mostly losses, so a crew that turned up to everything hit
+  zero on shift three and stayed there for good. Nothing they did afterwards could show.
+  Now a night fades a quarter of the gap back toward neutral — not forgiveness,
+  arithmetic — and the per-call numbers are set so that closing one of seven still costs
+  the town and closing five of seven earns it back. GDD rule 9 asks for recoverable
+  failure; this is what that means in numbers.
+- **The shift report named the same building as destroyed five headlines running**,
+  because it read the town's ACCUMULATED damage table instead of today's losses. It now
+  reports what was lost this shift, by name, or counts them if there were several.
+- **A saturated town ran out of places to have an emergency.** After five neglected
+  shifts, five buildings were boarded and the fifth shift produced ZERO calls — which
+  scored *better* than working, because a shift with nothing in it cannot be failed.
+  Dispatch now tries several kinds of call before giving up, and a retry leaves the
+  opening ladder rather than drawing the same pinned template four times.
+
+Measured after, over five shifts, worked against ignored: confidence 23% vs 16%, three
+buildings boarded vs five, 3.0 damage vs 5.0 — and no silent shifts in either town.
+
+`tools/m8-tests.js` — 22 assertions. 618 in total.
+
+
 ## 2026-08-20 — the link is the invitation
 
 Co-op needed one person to read five characters down a phone while the other typed them

@@ -116,12 +116,27 @@ export function clearSave() {
  * hydrants get fixed by the town eventually. This is the ONLY place a new shift's
  * starting world differs from the last one's ending world.
  */
+/**
+ * A town's opinion of you fades toward neutral between shifts.
+ *
+ * Not forgiveness — arithmetic. Losing a call costs more than controlling one pays,
+ * and a shift is mostly losses, so confidence measured over five consecutive shifts hit
+ * zero on shift three and stayed there for good, for a crew that turned up to
+ * everything (tools\_campaigndiag.js). A number that can only fall stops being a signal
+ * the moment it lands, and GDD rule 9 asks for recoverable failure: a bad shift has to
+ * hurt and a good run afterwards has to show.
+ */
+function fadeConfidence(c) {
+  const T = CONFIG.town;
+  return clamp01(c + (T.startConfidence - c) * T.confidenceFadePerShift);
+}
+
 export function advanceShift(town, summary) {
   const next = {
     ...town,
     version: SAVE_VERSION,
     shiftNumber: town.shiftNumber + 1,
-    confidence: clamp01(town.confidence),
+    confidence: fadeConfidence(clamp01(town.confidence)),
     buildings: {},
     hydrants: {},
     history: [...town.history, summary].slice(-12),

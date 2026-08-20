@@ -53,14 +53,21 @@ export function buildShiftReport(state) {
     })),
   };
 
-  report.headline = headlineFor(report, damaged);
+  report.headline = headlineFor(report, damaged, state.outcome.structuresLostNames || []);
   report.standfirst = standfirstFor(report);
   return report;
 }
 
-function headlineFor(r, damaged) {
-  const worst = damaged.find((d) => d.damage >= 0.6);
-  if (worst) return `${worst.name} destroyed in shift ${r.shiftNumber} fire`;
+function headlineFor(r, damaged, lostThisShift) {
+  /* What burned down TODAY. `damaged` is the town's ACCUMULATED damage table and still
+     holds every building ever gutted, so reading the worst entry out of it reported the
+     same loss as fresh news five shifts running — measured, five identical headlines in
+     a row (tools\_campaigndiag.js). */
+  if (lostThisShift.length) {
+    return lostThisShift.length === 1
+      ? `${lostThisShift[0]} destroyed in shift ${r.shiftNumber} fire`
+      : `${lostThisShift.length} buildings lost in shift ${r.shiftNumber}`;
+  }
   if (r.patientsLost > 0) return `Town mourns after ${r.calls}-call shift stretches volunteers thin`;
   if (r.lost > 0 && damaged.length) return `${damaged[0].name} damaged as calls stack up`;
   if (r.lost > 0) return `Volunteers overrun as ${r.lost} call${r.lost > 1 ? 's get' : ' gets'} away from them`;

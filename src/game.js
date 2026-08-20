@@ -96,7 +96,7 @@ export function createInitialState({ seed, seedLabel, town }) {
     town,
     outcome: {
       controlled: 0, lost: 0, patientsSaved: 0, patientsLost: 0,
-      structuresLost: 0, confidenceStart: town.confidence,
+      structuresLost: 0, structuresLostNames: [], confidenceStart: town.confidence,
     },
     telemetry: {
       distanceDrivenM: 0, litresUsed: 0, waterOnTarget: 0,
@@ -364,6 +364,10 @@ export class Game {
 
         case 'STRUCTURE_LOST': {
           s.outcome.structuresLost++;
+          // Names, not just a count: the shift report has to say what was lost THIS
+          // shift rather than reading the town's accumulated damage table, which still
+          // holds every building ever gutted.
+          s.outcome.structuresLostNames.push(BUILDING_BY_ID[e.buildingId].name);
           s.town.confidence = clamp01(s.town.confidence + CONFIG.town.confidenceStructureLost);
           const rec = ensureBuildingRecord(s, e.buildingId);
           rec.timesBurned++;
