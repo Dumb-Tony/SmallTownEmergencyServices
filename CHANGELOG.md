@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-08-20 — does it play?
+
+The GDD's build phases were all in, so the next milestone was the question Part II
+opens with: can this town reliably produce a story where you abandon one worsening
+problem for another? Nobody had ever measured it. Measured, the answer was no — twice,
+for reasons that had nothing to do with taste.
+
+**A live wire executed the casualty it touched.** A patient lying in a live zone lost
+10% of their condition every two seconds: 5% a second, against the 0.26% a second that
+defines "critical". They died 14 seconds after appearing, and the fastest a crew has
+ever reached anyone is 25 seconds. `crash_pole` is a CRITICAL-priority call that no
+play could win — turn up instantly, drive perfectly, kill the power first, and the
+patient is dead before you arrive. The guard around it looked like it fixed this; it
+only stopped the radio saying so five times in a row. Now the first contact hurts them
+once and lying in the zone makes them decline faster (×1.7) — a barrier to reaching
+them, which is what the GDD asks of the utility family, rather than an execution.
+
+**A call stayed open until the ambulance reached the clinic.** So a crash cost more of
+a ten-minute shift than the entire rest of the response, and across every bot shift
+ever run: 11 crashes worked, 0 controlled, 0 patients loaded, 0 delivered, and the
+`transport` job chosen exactly zero times. A call is now under control when the scene
+is clear and the casualty is packaged into the ambulance. The transport still matters —
+they keep declining in the truck and the delivery is what saves them — it just stops
+being the incident's problem.
+
+With both fixed, the medical chain completed end to end for the first time in the
+project's life, and **GDD Phase 5's exit gate passes on evidence**:
+
+| pooled over two seeds | one volunteer | two |
+|---|---|---|
+| town confidence | 54% | **97%** |
+| casualties reached | 3 | **4** |
+| casualties lost | 2 | **1** |
+| calls nobody attended | 4 | **2** |
+
+- `tools/m5-tests.js` — 24 assertions holding both fixes and the gate. 480 in total.
+- `tools/_playdiag.js` — where the chain breaks, per family, for one crew and for two.
+- `tools/_medicaldiag.js` — how long a casualty has, against what the response costs.
+- The crew bot learned to work as a crew: a shared board so two responders do not both
+  drive to the same fire, and complementary trucks when they take the same call.
+- The headless harness ran out of virtual time on suites that play whole shifts, and
+  reported it as "the page probably crashed". Budget raised 90 s -> 600 s.
+
+
 ## 2026-08-19 — the town stands up
 
 The complaint was exact: "top down, geometric shapes on a flat plane". The fix is the

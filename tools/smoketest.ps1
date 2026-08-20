@@ -65,7 +65,7 @@ $proc = Start-Process $chrome -ArgumentList `
   "--headless=new","--disable-gpu","--no-first-run","--no-default-browser-check",
   "--user-data-dir=$profileDir","--window-size=1280,720",
   "--autoplay-policy=no-user-gesture-required",
-  "--virtual-time-budget=90000","--dump-dom",$url `
+  "--virtual-time-budget=600000","--dump-dom",$url `
   -RedirectStandardOutput $domFile -NoNewWindow -Wait -PassThru
 
 if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }

@@ -196,9 +196,17 @@ function apparatusFor(state, inc) {
 }
 
 export class CrewBot {
-  /** @param {string} responderId  which crew member this bot is the hands of */
-  constructor(game, responderId = 'r1') {
+  /**
+   * @param {string} responderId  which crew member this bot is the hands of
+   * @param {{claims?: Map<string,string>}} [crew]  shared board, so a two-person crew
+   *   can see what the other one has taken. Without it both bots sorted the same call
+   *   list by the same priority and drove to the same fire — two people doing one
+   *   person's job, which is exactly the co-op that GDD Phase 5 says must NOT be the
+   *   outcome. Passing nothing keeps the solo behaviour byte for byte.
+   */
+  constructor(game, responderId = 'r1', crew = null) {
     this.game = game;
+    this.crew = crew;
     this.responderId = responderId;
     this.input = makeBotInput(responderId === 'r2' ? 'p2' : '');
     this.targetIncidentId = null;
@@ -290,18 +298,32 @@ export class CrewBot {
     const job = this.pickJob(s, inc);
     if (!job) { this.walkTowards(s, inc.x, inc.y); return inp; }
 
-    // A patient who needs the clinic needs the ambulance HERE. Dragging them two
-    // hundred metres to the station at half walking pace is not a plan; it is how the
-    // bot lost every transport it ever started.
+    /* The kit you need is on a truck that is not here — so BRING THE TRUCK.
+     *
+     * This is the whole medical family, and without it the family does not exist. The
+     * medkit lives on the ambulance and nowhere else, so a crash worked out of the
+     * rescue truck cannot be treated; the bot would walk two hundred metres to the
+     * station for the kit, walk back, and find the patient dead. Six measured shifts:
+     * 14 casualties needing a ride, 0 ever loaded, 0 delivered, and the `transport` job
+     * chosen exactly ZERO times — because `treat` always came first and could never be
+     * satisfied. Drive the right truck to the scene, like a crew would.
+     */
+    let needsTruck = null;
     if (job.kind === 'transport' && !me(s, this).draggingVictimId) {
+      // the ambulance IS the job: it has to be here, wherever the bot is standing
       const amb = s.apparatus.find((a) => a.id === 'ambulance');
-      if (amb && dist(amb.x, amb.y, inc.x, inc.y) > 30) {
-        if (this.fetchingId !== amb.id) { this.note('going back for the ambulance'); this.fetchingId = amb.id; }
-        this.fetching = inc;
-        this.plannedApparatus = amb.id;
-        this.goToVehicle(s, amb);
-        return inp;
+      if (amb && dist(amb.x, amb.y, inc.x, inc.y) > 30) needsTruck = amb;
+    }
+    // (Kit that is merely far is already handled below, by the forgotten-kit trip.)
+    if (needsTruck) {
+      if (this.fetchingId !== needsTruck.id) {
+        this.note(`going back for ${needsTruck.name}`);
+        this.fetchingId = needsTruck.id;
       }
+      this.fetching = inc;
+      this.plannedApparatus = needsTruck.id;
+      this.goToVehicle(s, needsTruck);
+      return inp;
     }
 
     // The trip back for the thing you did not bring. This is the GDD's forgotten-kit
@@ -359,9 +381,21 @@ export class CrewBot {
     }
 
     const current = open.find((i) => i.id === this.targetIncidentId);
+
+    /* Split the board. A call somebody else has taken is worth less than one nobody is
+     * going to — unless it is the only call left, in which case two pairs of hands on
+     * one job is right (one on the line, one on the casualty). */
+    const taken = (inc) => {
+      if (!this.crew) return false;
+      const by = this.crew.claims.get(inc.id);
+      return !!by && by !== this.responderId;
+    };
+    const free = open.filter((i) => !taken(i));
+    const pool = free.length ? free : open;
+
     // Stay on a job unless something outranks it — a bot that re-plans every step
     // drives back and forth across town and closes nothing.
-    const best = open.slice().sort((a, b) =>
+    const best = pool.slice().sort((a, b) =>
       (RANK[a.priority] - RANK[b.priority]) ||
       (dist(me(s, this).x, me(s, this).y, a.x, a.y) - dist(me(s, this).x, me(s, this).y, b.x, b.y)))[0];
     if (current && RANK[current.priority] <= RANK[best.priority]) return current;
@@ -372,6 +406,23 @@ export class CrewBot {
       this.note(`taking ${best.headline} at ${best.place} in the ${this.plannedApparatus}`);
     }
     this.targetIncidentId = best.id;
+    if (this.crew) {
+      for (const [id, by] of this.crew.claims) if (by === this.responderId && id !== best.id) this.crew.claims.delete(id);
+      this.crew.claims.set(best.id, this.responderId);
+      /* Bring the truck the other one did NOT bring. A crash wants the rescue for the
+         spreaders and the ambulance for the kit and the ride, and one person cannot
+         drive both — which is the co-op story the GDD is asking for. */
+      const partnerHere = this.crew.trucks &&
+        [...this.crew.trucks.entries()].find(([rid, tid]) => rid !== this.responderId &&
+          this.crew.claims.get(best.id) && tid);
+      const mine = apparatusFor(s, best);
+      if (partnerHere && partnerHere[1] === mine) {
+        const vics = incidentVictims(s, best);
+        if (mine !== 'ambulance' && vics.some((v) => !victimHandled(v))) this.plannedApparatus = 'ambulance';
+        else if (mine === 'ambulance') this.plannedApparatus = 'rescue';
+      }
+      if (this.crew.trucks) this.crew.trucks.set(this.responderId, this.plannedApparatus);
+    }
     return best;
   }
 

@@ -190,6 +190,10 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
 - `tools/m1-tests.js` — the systems: fire spread and suppression, water supply, gas
   ignition chains, live lines, blockage, patients, dispatch pacing, incident lifecycle,
   and the GDD's signature-scenario acceptance test.
+- `tools/m5-tests.js` — does it play? The GDD's own question, asserted: the medical
+  chain completes end to end in a real bot shift, a call closes when the scene is clear,
+  and two volunteers measurably beat one (GDD Phase 5's exit gate). `tools/_playdiag.js`
+  and `tools/_medicaldiag.js` are the measurements behind it.
 - `tools/m4-tests.js` — the three-quarter view. The projection is pure maths, so it is
   asserted rather than eyeballed: screen->world inverts exactly (mouse aim depends on
   it), height goes up and leans outwards, the draw order really is back-to-front, a
@@ -210,7 +214,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**456 assertions.**
+**480 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 

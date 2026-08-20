@@ -48,9 +48,22 @@ export function victimState(v) {
   return 'stable';
 }
 
-/** True once this patient no longer needs anything from the crew. */
+/**
+ * True once this patient no longer needs anything from the crew AT THE SCENE.
+ *
+ * Being in the back of the ambulance counts. A call is under control when the scene is
+ * clear and the casualty is packaged — not when the ambulance finally reaches the
+ * clinic on the far side of town. Holding the incident open until handover made the
+ * crash and medical families unclosable: measured over six shifts, 11 crashes worked
+ * and 0 controlled, because the round trip costs more of a ten-minute shift than the
+ * whole rest of the response put together.
+ *
+ * The transport still matters — they keep declining in the truck and the delivery is
+ * what saves them — it just stops being the incident's problem.
+ */
 export function victimHandled(v) {
   if (v.lost || v.delivered) return true;
+  if (v.inApparatusId) return true;
   if (v.trappedBy) return false;
   if (v.severity === 'stable' && !v.needsTransport) return true;
   if (v.needsTransport) return false;
@@ -119,6 +132,22 @@ export function stepVictims(state, dtMs) {
     if (v.trappedBy) decline *= M.declineTrappedMul;
     const heat = heatAt(state, v.x, v.y);
     if (heat > 0.15) decline *= 1 + (M.declineFireMul - 1) * Math.min(1, heat);
+
+    /* A live wire down across the car is a barrier to REACHING them, which is what the
+     * GDD asks of the utility family — not an execution.
+     *
+     * It used to take 10% of a casualty's condition every two seconds, which is 5% a
+     * second against a critical decline of 0.26% a second: twenty times the rate that
+     * defines the family. Measured, they died 14 s after appearing, and the fastest a
+     * crew has ever reached anyone is 25 s. `crash_pole` is a CRITICAL-priority call
+     * that a player could not save by any play at all — turn up instantly, drive
+     * perfectly, kill the power first, and the patient is dead before you arrive. The
+     * throttle around it looked like it fixed this; it only stopped the radio spam.
+     *
+     * Now: the first contact hurts them once (it is why they are a casualty), and
+     * lying in the zone makes them decline faster while they are in it. */
+    const zone = liveZoneAt(state, v.x, v.y);
+    if (zone) decline *= M.declineLiveMul;
     if (state.simTimeMs < v.stabilisedUntilMs) decline *= M.treatDeclineMul;
     if (v.inApparatusId) decline *= 0.45;   // in the back of the ambulance, on oxygen
 
@@ -131,18 +160,16 @@ export function stepVictims(state, dtMs) {
       out.push({ type: 'OCCUPANT_EVACUATING', victimId: v.id, incidentId: v.incidentId });
     }
 
-    /* live wires do not care that someone is already having a bad day */
-    // Reported once. A casualty lying inside a live zone is not news every two
-    // seconds, and the radio said so five times in a row before this guard existed.
-    const zone = liveZoneAt(state, v.x, v.y);
-    if (zone && v.shocked <= 0) {
+    /* live wires do not care that someone is already having a bad day — once. The
+       repeat damage is gone (see declineLiveMul above); the first contact still costs
+       them, still calls for a ride, and is still reported once rather than every two
+       seconds, which is what the guard was actually for. */
+    if (zone && !v.shockReported) {
+      v.shockReported = true;
       v.shocked = 2000;
-      v.condition = Math.max(0, v.condition - 0.10);
+      v.condition = Math.max(0, v.condition - M.shockCost);
       v.needsTransport = true;
-      if (!v.shockReported) {
-        v.shockReported = true;
-        out.push({ type: 'VICTIM_SHOCKED', victimId: v.id, incidentId: v.incidentId });
-      }
+      out.push({ type: 'VICTIM_SHOCKED', victimId: v.id, incidentId: v.incidentId });
     }
     if (v.shocked > 0) v.shocked -= dtMs;
 

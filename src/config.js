@@ -152,6 +152,13 @@ export const CONFIG = {
     loadMs: 3000,
     clinicHandoverMs: 4000,
     criticalAt: 0.34,        // below this the patient is reported critical
+
+    /* A live wire down across the casualty. It is a barrier to REACHING them, not an
+       execution: one hit when it first touches them, then a faster clock while they lie
+       in it. Measured before this existed: dead 14 s after appearing, against a fastest
+       ever arrival of 25 s — the call could not be won by any play. */
+    shockCost: 0.10,
+    declineLiveMul: 1.7,
   },
 
   /* ── tools ──────────────────────────────────────────────────────────────── */
