@@ -92,6 +92,22 @@ export class Input {
       this._down.delete(e.code);
       this._released.add(e.code);
     });
+    /* The mouse. `pointer` and `pointerWorld` were declared from the start and never
+       filled in by anything, so aiming with the mouse — which the controls list has
+       always advertised — silently did nothing and every stream came out of the
+       keyboard facing. `seen` stays false until the mouse actually moves, so a
+       keyboard-only player is never dragged around by a cursor parked in a corner. */
+    add(this.target, 'pointermove', (e) => {
+      this.pointer.x = e.clientX;
+      this.pointer.y = e.clientY;
+      this.pointer.seen = true;
+    });
+    add(this.target, 'pointerdown', (e) => {
+      this.pointer.x = e.clientX; this.pointer.y = e.clientY;
+      this.pointer.seen = true; this.pointer.down = true;
+    });
+    add(this.target, 'pointerup', () => { this.pointer.down = false; });
+
     // A held key whose keyup lands outside the window would stick forever.
     add(this.target, 'blur', () => { this.clear(); if (this.onBlur) this.onBlur(); });
     return this;

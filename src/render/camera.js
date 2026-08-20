@@ -1,15 +1,31 @@
-/* Top-down camera — GDD §19.3.
+/* Three-quarter camera — GDD §19.3.
  *
- * Milestone 0 fits the whole airport on screen so route context is visible while the
- * layout is being locked. A gently-following camera arrives with the player (M1); the
- * transform below already supports it via `centre`, so that is a call-site change.
+ * The town is simulated flat: every position in the game is (x, y) in metres on one
+ * plane, and collision, reach and aim all work in those metres. NOTHING here changes
+ * that. What changes is the projection:
+ *
+ *   - `tilt` squashes the vertical axis, so the ground plane recedes instead of lying
+ *     square to the screen. 1.0 is looking straight down; this game looks down at about
+ *     0.62, which is a shallow enough angle to still read a street layout;
+ *   - `top(x, y, h)` returns where a point h METRES ABOVE the ground lands, so anything
+ *     with height can be extruded — walls, trees, trucks, people;
+ *   - `lean` fakes the perspective a real lens gives: verticals away from the centre of
+ *     the frame lean outwards, which is what makes a box look like a building rather
+ *     than a rectangle with a stripe on it.
+ *
+ * The whole projection is these three numbers, and it inverts exactly, so screenToWorld
+ * still hands the simulation honest metres for mouse aim.
  *
  * Pure maths + a canvas transform. No game rules here (GDD §31.3).
  */
 
 export class Camera {
   constructor({ worldW, worldH, paddingM = 0, maxPixelRatio = 2,
-                viewWidthM = 62, followLerp = 7 }) {
+                viewWidthM = 62, followLerp = 7,
+                tilt = 0.62, heightK = 0.9, leanK = 0.006 }) {
+    this.tilt = tilt;
+    this.heightK = heightK;
+    this.leanK = leanK;
     this.worldW = worldW;
     this.worldH = worldH;
     this.paddingM = paddingM;
@@ -92,14 +108,37 @@ export class Camera {
     return { w: this.cssW, h: this.cssH };
   }
 
-  /** Apply world->screen to a 2D context. Everything drawn after this is in METRES. */
+  /**
+   * Apply world->screen to a 2D context. Everything drawn after this is in METRES.
+   *
+   * The y scale is deliberately NOT the x scale: that single asymmetry is the whole
+   * three-quarter view. A consequence worth knowing before you chase it as a bug —
+   * a circle drawn in world units comes out as an ellipse, and a stroke is thinner
+   * vertically than horizontally. Both are correct here.
+   */
   applyTo(ctx) {
     const s = this.scale * this.dpr;
+    const sy = s * this.tilt;
     const ox = (this.cssW * this.dpr) / 2 - this.centre.x * s;
-    const oy = (this.cssH * this.dpr) / 2 - this.centre.y * s;
-    ctx.setTransform(s, 0, 0, s, ox, oy);
+    const oy = (this.cssH * this.dpr) / 2 - this.centre.y * sy;
+    ctx.setTransform(s, 0, 0, sy, ox, oy);
     return s;
   }
+
+  /**
+   * Where a point `h` metres above the ground lands, in the same world units everything
+   * else is drawn in — so a wall is a quad from the footprint to top() of the footprint,
+   * and no drawing code has to know how the projection works.
+   */
+  top(x, y, h) {
+    return {
+      x: x + (x - this.centre.x) * h * this.leanK,
+      y: y - (h * this.heightK) / this.tilt,
+    };
+  }
+
+  /** Screen-space rise of one metre of height, for anything sized in pixels. */
+  riseFor(h) { return h * this.heightK * this.scale; }
 
   /** Reset to raw device pixels — for HUD drawn on the canvas, and for clearing. */
   resetTransform(ctx) { ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); }
@@ -108,7 +147,7 @@ export class Camera {
     const s = this.scale;
     return {
       x: this.cssW / 2 + (x - this.centre.x) * s,
-      y: this.cssH / 2 + (y - this.centre.y) * s,
+      y: this.cssH / 2 + (y - this.centre.y) * s * this.tilt,
     };
   }
 
@@ -116,10 +155,20 @@ export class Camera {
     const s = this.scale;
     return {
       x: this.centre.x + (sx - this.cssW / 2) / s,
-      y: this.centre.y + (sy - this.cssH / 2) / s,
+      y: this.centre.y + (sy - this.cssH / 2) / (s * this.tilt),
     };
   }
 
-  /** Metres visible across the viewport — used to decide label density. */
-  get visibleM() { return { w: this.cssW / this.scale, h: this.cssH / this.scale }; }
+  /**
+   * The visible world rectangle, in metres. `x`/`y` are its top-left corner.
+   *
+   * They were missing until now, and drawGround read them anyway: `Math.floor(undefined
+   * / step)` is NaN, `for (let x = NaN; x < NaN; ...)` runs zero times, and the ground
+   * detail it draws has therefore never appeared on screen once. Verify with numbers.
+   */
+  get visibleM() {
+    const w = this.cssW / this.scale;
+    const h = this.cssH / (this.scale * this.tilt);
+    return { w, h, x: this.centre.x - w / 2, y: this.centre.y - h / 2 };
+  }
 }

@@ -1,7 +1,7 @@
 # Small Town Emergency Services
 
-A cooperative emergency-response sandbox in one continuous top-down town, for one or
-two players on the same keyboard. Browser, Canvas 2D, ES modules, zero dependencies,
+A cooperative emergency-response sandbox in one continuous three-quarter-view town, for
+two players on one keyboard or two browsers on opposite ends of the internet. Browser, Canvas 2D, ES modules, zero dependencies,
 no build step.
 
 **▶ Play it: https://dumb-tony.github.io/SmallTownEmergencyServices/**
@@ -16,9 +16,11 @@ it changes the town you turn up to next time.
 See [GDD.md](GDD.md) for the design this is built against, and
 [CHANGELOG.md](CHANGELOG.md) for what has actually been built.
 
-![Two volunteers working a structure fire: one inside on the line, one at the door with an extinguisher](docs/coop.png)
+![A crew working a structure fire with the roof taken off, flame breaking through the floor they are standing on](docs/m4-scene.png)
 
-![Main Street at driving zoom, four calls on the board](docs/town.png)
+![Main Street at driving zoom: pitched roofs, walls, wires overhead, four calls on the board](docs/m4-town.png)
+
+![The three appliances on the apron, the station gone translucent so it cannot hide them](docs/m4-trucks.png)
 
 ![The shift report after ten minutes in which nobody responded to anything](docs/report.png)
 
@@ -116,6 +118,37 @@ leak. That is the reason it is worth a hand.
 
 `M` mutes, and the setting sticks.
 
+## How it looks
+
+Three quarters, not top-down. The town is simulated flat — every position is `(x, y)`
+in metres on one plane, and collision, reach and aim all work in those metres — and the
+whole of the view is three numbers in `CONFIG.render`:
+
+| | |
+|---|---|
+| `tilt` 0.55 | squashes the vertical axis, so the ground recedes instead of lying square to the screen |
+| `heightScale` 1.35 | how tall a metre of building looks against a metre of ground |
+| `lean` 0.004 | fake perspective: verticals away from the centre of the frame lean outwards |
+
+`camera.top(x, y, h)` says where a point `h` metres up lands, and everything with height
+is extruded from its real footprint through it: walls, pitched roofs, a steeple, trees,
+trucks, people, the wires strung between the poles. A wall is six metres tall to look at
+and zero metres tall to walk into — nothing here feeds back into the simulation.
+
+Height means things occlude each other, so the standing world is not drawn in layers any
+more: every upright thing is collected with a depth key — the edge nearest the camera —
+and the list is drawn from the back of the town forwards. Two rules keep that from
+hiding the game:
+
+- **the roof comes off** the building you walk into, and the fire is drawn on the floor
+  you are standing on;
+- **a building goes translucent** when the crew is behind it. The station's apron is on
+  its north side, so the first thing a solid station does is hide all three appliances.
+
+The fire is drawn on the roof it is eating through — char spreading, wet cells where the
+line has been played, flame breaking out of the cells that are actually alight — so
+"it is spreading left" stays a thing you see rather than a number you are told.
+
 ## Persistence
 
 One shift is the unit of persistence. Between shifts the town keeps building damage,
@@ -157,6 +190,12 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
 - `tools/m1-tests.js` — the systems: fire spread and suppression, water supply, gas
   ignition chains, live lines, blockage, patients, dispatch pacing, incident lifecycle,
   and the GDD's signature-scenario acceptance test.
+- `tools/m4-tests.js` — the three-quarter view. The projection is pure maths, so it is
+  asserted rather than eyeballed: screen->world inverts exactly (mouse aim depends on
+  it), height goes up and leans outwards, the draw order really is back-to-front, a
+  frame changes nothing about the town, and no building is allowed to hide the crew.
+  `tools/_perfdiag.js` measures the cost: 1.1 ms a frame on foot, 9.2 ms at driving
+  zoom, 11.6 ms with the whole town on screen.
 - `tools/m3-tests.js` — the netcode. A real host and a real client — two whole `Game`
   instances — joined by a loopback link that JSON round-trips every message, in one page.
   It proves the wire format, the authority rule (a client cannot move the host's
@@ -171,7 +210,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**404 assertions.**
+**456 assertions.**
 
 Suites emit progressively, so a hang still reports how far it got.
 

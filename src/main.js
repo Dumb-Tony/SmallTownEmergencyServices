@@ -32,6 +32,9 @@ const camera = new Camera({
   maxPixelRatio: CONFIG.render.maxPixelRatio,
   viewWidthM: CONFIG.render.viewWidthM,
   followLerp: CONFIG.render.followLerp,
+  tilt: CONFIG.render.tilt,
+  heightK: CONFIG.render.heightScale,
+  leanK: CONFIG.render.lean,
 });
 const renderer = new Renderer(canvas, camera);
 const input = new Input(window).attach();
@@ -122,6 +125,14 @@ function frame(now) {
     camera.viewWidthM += (wanted - camera.viewWidthM) * k;
     camera._recomputeScale();
   }
+
+  /* Mouse aim. input.pointerWorld has claimed since it was written that main.js
+     recomputes it every frame; nothing ever did, so it was permanently null and every
+     stream came out of the keyboard facing instead. It has to happen HERE because the
+     screen->world inverse belongs to the camera, and the camera moved this frame. */
+  input.pointerWorld = input.pointer.seen
+    ? camera.screenToWorld(input.pointer.x, input.pointer.y)
+    : null;
 
   /* Host and solo step the world; a client does not — game.frame() refuses on a client,
      so this call is the same line either way and the difference stays in one place.

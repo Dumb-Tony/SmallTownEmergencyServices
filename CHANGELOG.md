@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-08-19 — the town stands up
+
+The complaint was exact: "top down, geometric shapes on a flat plane". The fix is the
+projection, not more detail on flat rectangles.
+
+- **Three-quarter view.** `tilt` squashes the ground plane, `camera.top(x, y, h)` says
+  where a point h metres up lands, and `lean` gives verticals a fake perspective. The
+  simulation is untouched: a wall is six metres tall to look at and zero metres tall to
+  walk into. Everything with height is extruded from its real footprint — walls, pitched
+  roofs, a steeple, chimneys, trees, trucks, people, and the wires between the poles,
+  which had never been drawn at all.
+- **Depth sorting.** Upright things are collected with a depth key — the edge nearest
+  the camera — and drawn from the back of the town forwards. Two rules stop that hiding
+  the game: the roof comes off the building you walk into (with the fire drawn on the
+  floor you are standing on), and a building goes translucent when the crew is behind
+  it. The station's apron is on its north side, so a solid station hid all three
+  appliances the moment it had walls.
+- **The fire is on the roof it is eating through**: char spreading, wet cells where the
+  line has been played, flame breaking out of the cells actually alight.
+- `tools/m4-tests.js` — 52 assertions on the projection, the draw order and the veil.
+  `tools/_perfdiag.js` measures 1.1 / 9.2 / 11.6 ms a frame at the three zooms.
+
+Four bugs found on the way, three of them older than this work:
+
+- **`shade()` painted things pure black.** It parsed only `#rrggbb`, and four call sites
+  hand it its own `rgb(...)` output — a cab is a lighter version of an already-shaded
+  face. `parseInt` gave NaN, `NaN >> 16 & 255` is **0**, and so the truck cabs, the
+  wrecked car's cabin, the church steeple and every tool on the ground were painted
+  black without anything throwing. Found by probing the actual pixels.
+- **`camera.visibleM` never had `x` or `y`**, and `drawGround` read them anyway:
+  `Math.floor(undefined / step)` is NaN, the loop ran zero times, and the ground detail
+  had never once appeared on screen.
+- **Mouse aim had never worked.** `input.pointerWorld` claimed in a comment that main.js
+  recomputed it every frame; nothing did, and there was no pointer listener either — so
+  the mouse did nothing and every stream came out of the keyboard facing.
+- **Flames were painted off-target**: the gradient was built before the transform that
+  moved it, and a canvas gradient resolves in the space it is painted in, so the fire
+  was a few dim specks instead of a fire.
+
+Screenshots hung the harness until the pose scripts stopped calling `S.frame()` by
+hand — main.js's frame re-schedules itself, so each manual call forked another render
+chain, and a page that never goes idle never reaches its virtual-time budget.
+
+
 ## 2026-08-19 — Phase 5b: the network half of co-op
 
 - **Host-authoritative netcode.** One five-character room code, a direct WebRTC

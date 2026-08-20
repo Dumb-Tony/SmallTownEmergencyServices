@@ -72,4 +72,14 @@ S.camera.follow(cx / s.responders.length, cy / s.responders.length - 3, 0);
    the first version of this pose lit a fire and then watched it burn to the ground
    before the shutter. The clock stops; the renderer still draws. */
 g.clock.setPaused(true);
-for (let k = 0; k < 3; k++) S.frame(performance.now());
+/* Freeze the page, then draw the pose directly.
+
+   main.js's frame() re-schedules itself forever, and a headless Chrome whose page never
+   goes idle never reaches its virtual-time budget — so the shutter never fires and the
+   run hangs until something kills it. Stubbing rAF here is safe because this module
+   runs after main.js but before the first callback: the loop has been scheduled and has
+   not started, so nothing is half-drawn. The pose then renders exactly once. */
+window.requestAnimationFrame = () => 0;
+S.camera.resize(document.getElementById('stage'));
+S.renderer.render(S.game.state, performance.now());
+S.hud.update();

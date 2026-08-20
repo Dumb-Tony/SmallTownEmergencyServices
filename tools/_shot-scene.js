@@ -57,4 +57,14 @@ S.camera.follow(s.player.x, s.player.y, 0);
 
 // draw a few frames so the HUD and the canvas are both current
 g.clock.setPaused(true);
-for (let i = 0; i < 3; i++) S.frame(performance.now());
+/* Freeze the page, then draw the pose directly.
+
+   main.js's frame() re-schedules itself forever, and a headless Chrome whose page never
+   goes idle never reaches its virtual-time budget — so the shutter never fires and the
+   run hangs until something kills it. Stubbing rAF here is safe because this module
+   runs after main.js but before the first callback: the loop has been scheduled and has
+   not started, so nothing is half-drawn. The pose then renders exactly once. */
+window.requestAnimationFrame = () => 0;
+S.camera.resize(document.getElementById('stage'));
+S.renderer.render(S.game.state, performance.now());
+S.hud.update();

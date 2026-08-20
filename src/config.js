@@ -37,6 +37,15 @@ export const CONFIG = {
     fitPaddingM: 6,
     maxPixelRatio: 2,
     zoomLerp: 3.5,
+
+    /* The three-quarter projection, in three numbers (src/render/camera.js).
+       tilt 1.0 is straight down and 0 is on the horizon; 0.62 is shallow enough to see
+       walls and steep enough to still read a street layout. heightScale is how tall a
+       metre of building looks against a metre of ground, and lean is the fake
+       perspective that stops verticals from all being parallel. */
+    tilt: 0.55,
+    heightScale: 1.35,
+    lean: 0.004,
   },
 
   /* ── responder on foot ──────────────────────────────────────────────────── */
