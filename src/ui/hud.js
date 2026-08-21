@@ -499,7 +499,22 @@ function nextShiftBlock(r) {
       .map((d) => `${d.name} ${Math.round(d.damage * 100)}%`).join(', ')}`);
   }
   if (n.hydrantsOut) bits.push(`<b>Out of service:</b> ${n.hydrantsOut} hydrant${n.hydrantsOut === 1 ? '' : 's'}`);
-  if (!bits.length) bits.push('Nothing carries over. The town is whole.');
+  /* Where you left things. Named, with the tank reading, because a truck at the far end of
+     Main Street with 200 L in it is a decision about tomorrow — and the same truck
+     discovered by walking out of the station and not seeing it is an ambush. */
+  if (n.apparatusOut && n.apparatusOut.length) {
+    bits.push(`<b>Still out:</b> ${n.apparatusOut
+      .map((a) => `${a.name} at ${a.where}${a.waterL ? `, ${a.waterL} L aboard` : ''}`).join('; ')}`);
+  }
+  if (n.damagedApparatus && n.damagedApparatus.length) {
+    bits.push(`<b>In the shop:</b> ${n.damagedApparatus
+      .map((a) => `${a.name} ${Math.round(a.damage * 100)}%`).join(', ')}`);
+  }
+  if (n.toolsOut && n.toolsOut.length) {
+    bits.push(`<b>Left in the field:</b> ${n.toolsOut
+      .map((t) => `${t.name} at ${t.where}`).join(', ')}`);
+  }
+  if (!bits.length) bits.push('Nothing carries over. The town is whole and the trucks are in.');
 
   const past = n.history.length > 1
     ? `<div class="pastshifts">${n.history.slice(0, -1).map((h) => `<span>${h}</span>`).join('')}</div>`

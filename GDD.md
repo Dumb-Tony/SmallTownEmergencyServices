@@ -300,7 +300,7 @@ Beyond the MVP scope, and in each case because a prior gate exposed the gap:
 
 Its symbolic proximity interactions remain explicitly prototype shortcuts.
 
-Everything above is held down by a headless-browser suite — 1255 assertions across
-fifteen files — including a crew bot that plays whole shifts through the real input path,
+Everything above is held down by a headless-browser suite — 1343 assertions across
+sixteen files — including a crew bot that plays whole shifts through the real input path,
 a computed colour/contrast/colour-vision audit, and a robustness suite that soaks six
 shifts without a reload. See `README.md` for what each suite is for.

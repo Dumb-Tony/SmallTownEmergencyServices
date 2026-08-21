@@ -11,6 +11,7 @@
 
 import { CONFIG } from '../config.js';
 import { CONDITION_IDS } from '../sim/weather.js';
+import { clampToBounds, STATION } from '../data/town.js';
 
 export const SAVE_KEY = 'stes.town.v1';
 export const SAVE_VERSION = 1;
@@ -30,6 +31,22 @@ export function defaultTown() {
      * repeat of it down. A save from before weather existed has null, which the roll
      * reads as "no preference" — the same thing shift 1 sees. */
     lastWeather: null,
+
+    /* "vehicle damage and location" and "equipment location and consumables", both from
+     * the GDD's persistence list and both missing until now.
+     *
+     * The station tidies up overnight, but only what is AT the station. A truck left on
+     * the apron goes back in its bay with a full tank; a truck left at the far end of
+     * Main Street is at the far end of Main Street when you clock on, and the shift
+     * report says so the night before. That is the GDD asking for it directly —
+     * "missing, depleted, damaged, or badly parked apparatus should create
+     * improvisation" — and it is the one consequence in the list that the player causes
+     * entirely by hand.
+     *
+     * apparatus: id -> { damage, x, y, angle, waterL, home }
+     * tools:     id -> { x, y }   (only the ones left lying in the field) */
+    apparatus: {},
+    tools: {},
   };
 }
 
@@ -75,8 +92,48 @@ export function migrate(data) {
     // A condition id, or nothing. Checked against the table rather than trusted, because
     // this is the one field a hand-edited save could use to make up a sixth season.
     lastWeather: CONDITION_IDS.includes(data.lastWeather) ? data.lastWeather : null,
+    apparatus: sanitiseApparatus(data.apparatus),
+    tools: sanitiseTools(data.tools),
   };
 }
+
+/* Positions come back through clampToBounds, not through a range check, because a save
+ * is a file a player can edit and a truck at x = 1e9 is a camera that follows it there. */
+function sanitiseApparatus(obj) {
+  const out = {};
+  if (!obj || typeof obj !== 'object') return out;
+  for (const [id, rec] of Object.entries(obj)) {
+    if (!rec || typeof rec !== 'object') continue;
+    if (rec.home) { out[id] = { home: true, damage: clamp01(Number(rec.damage) || 0) }; continue; }
+    const p = clampToBounds(num(rec.x), num(rec.y), 3);
+    out[id] = {
+      home: false,
+      damage: clamp01(Number(rec.damage) || 0),
+      x: p.x, y: p.y,
+      angle: Number.isFinite(Number(rec.angle)) ? Number(rec.angle) : 0,
+      waterL: Math.max(0, Math.min(99999, Math.round(Number(rec.waterL) || 0))),
+    };
+  }
+  return out;
+}
+
+function sanitiseTools(obj) {
+  const out = {};
+  if (!obj || typeof obj !== 'object') return out;
+  for (const [id, rec] of Object.entries(obj)) {
+    if (!rec || typeof rec !== 'object') continue;
+    const p = clampToBounds(num(rec.x), num(rec.y), 1);
+    out[id] = { x: p.x, y: p.y };
+    // The counter that eventually gets it collected. Same lesson as the hydrant's
+    // shiftsDown: a sanitiser that rebuilds the record without it makes the retrieval
+    // arm of advanceShift unreachable through a real save.
+    const s = Number(rec.shiftsOut);
+    if (Number.isFinite(s) && s > 0) out[id].shiftsOut = Math.min(9, Math.round(s));
+  }
+  return out;
+}
+
+function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
 function clamp01(v) { return Math.min(1, Math.max(0, v)); }
 
@@ -176,6 +233,52 @@ export function advanceShift(town, summary) {
     }
     if (damage <= 0.001 && boarded === 0) continue;   // whole again: forget it
     next.buildings[id] = { damage, boardedShifts: boarded, timesBurned: rec.timesBurned };
+  }
+
+  /* The department patches up its own trucks overnight, and the countdown runs the same
+   * way the buildings' does: unconditionally, so a bad night is a slow engine for a shift
+   * or two rather than a slow engine for ever. A truck that made it back to the apron is
+   * also refilled and re-parked; one left in the field is not, and stays where it is.
+   *
+   * `home` is decided at endShift, where the position is known. Storing the decision
+   * rather than the position keeps a tidy truck's record to two fields and means nothing
+   * here has to know where the bays are. */
+  /* ⚠ AND SOMEBODY GOES AND FETCHES ONE BACK.
+   *
+   * Without this it is the boarded-building fixed point wearing a different hat: trucks
+   * left out make the next shift harder, a harder shift leaves more trucks out, and the
+   * station never recovers. Measured over six bot shifts before this line existed —
+   * 1 truck out, then 2, then 3 and there it stayed, with town confidence 33% -> 8% ->
+   * 0% and never above 1% again. A consequence that makes itself harder to undo is not a
+   * consequence, it is a trap, and this codebase has now built the same trap twice.
+   *
+   * The repair is the countdown, and it is what eventually brings a wrecked truck home:
+   * once the department has it back under `undriveableDamage` somebody drives it in. That
+   * is the same unconditional-countdown rule the buildings needed — nothing here is
+   * gated on a condition the countdown itself keeps true — so a truck abandoned at the
+   * far end of the valley is a problem for a shift or two and never for ever. */
+  next.apparatus = {};
+  for (const [id, rec] of Object.entries(town.apparatus || {})) {
+    const damage = Math.max(0, (rec.damage || 0) - CONFIG.town.apparatusRepairPerShift);
+    const cameHome = rec.home || damage < CONFIG.town.undriveableDamage;
+    if (cameHome) {
+      if (damage > 0.001) next.apparatus[id] = { home: true, damage };
+    } else {
+      next.apparatus[id] = { ...rec, damage };
+    }
+  }
+  /* Kit gets collected too, and on a shorter clock than the trucks.
+   *
+   * "Nobody goes out looking for it" was the first rule, and it made a dropped chainsaw a
+   * permanent loss: it lies in the field, so it is still lying in the field at the next
+   * bell, so it re-banks — for ever, with no counter anywhere. Measured over six bot
+   * shifts, one tool out on every single one of them and the crew closing 2 calls against
+   * a control's 7. A volunteer station does not write off a chainsaw. One shift without
+   * it is the consequence; the second morning somebody has been out and got it. */
+  next.tools = {};
+  for (const [id, rec] of Object.entries(town.tools || {})) {
+    const out = (rec.shiftsOut || 0) + 1;
+    if (out <= CONFIG.town.toolRetrieveShifts) next.tools[id] = { ...rec, shiftsOut: out };
   }
 
   /* A struck hydrant is out for the following shift, then the water board gets to it —

@@ -291,6 +291,28 @@ export const CONFIG = {
     confidenceStructureLost: -0.06,
     repairShifts: 3,           // shifts a gutted building stays boarded up
     hydrantDownShifts: 1,      // a struck hydrant is out for this many shifts after
+
+    /* The station tidies up overnight — but only what got back to it. A truck inside this
+       radius of its own bay is re-parked and refilled; one outside it is where you left
+       it when you clock on. 22 m covers the apron and the kerb in front of the station
+       without covering Main Street, so "nearly back" counts and "abandoned at the
+       junction" does not. */
+    stationTidyRadiusM: 22,
+    apparatusRepairPerShift: 0.30,  // a bad night is a slow engine for a shift or two
+    /* How many trucks the department will leave where you parked them. Beyond this,
+       somebody goes and fetches the furthest one back overnight — see advanceShift. At 0
+       the consequence disappears by roll call; with no limit at all the station gets
+       stripped and stays stripped, which is the boarded-building fixed point again. */
+    /* Past this, a truck is not driving itself home and stays where you left it until the
+       department has patched it back under the line. 0.6 is two thirds of the way to a
+       write-off, which takes a real crash and not a kerb: the top-speed penalty is already
+       at its 0.45 floor by then, so a truck this dented was going to be a bad truck
+       tomorrow whatever happened to its position. */
+    undriveableDamage: 0.6,
+    /* And kit gets collected on a shorter clock than a truck does — a station does not
+       write off a chainsaw. One shift without it is the consequence; without this it lay
+       in the field for ever, because a tool on the ground re-banks itself every night. */
+    toolRetrieveShifts: 1,
   },
 
   /* ── debug ──────────────────────────────────────────────────────────────── */

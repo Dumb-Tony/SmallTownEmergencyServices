@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-08-20 — the station remembers
+
+The last two entries on the GDD's persistence list — "vehicle damage and location" and
+"equipment location and consumables" — were the only ones never implemented. They are now,
+and getting them right took three goes, because this is the one carry-over the player
+causes **entirely by hand** and it is correspondingly easy to make it feel like an ambush
+rather than a consequence.
+
+**What the shift banks:** a truck's damage, always; a truck's position and tank, only if it
+cannot drive; and kit left lying in the field. The report names all of it the night
+before — *"Still out: Engine 1 at Miller Barn, 250 L aboard"*, *"Left in the field:
+Chainsaw at Miller Farmhouse"* — because a consequence you are told about is a decision
+about tomorrow, and the same consequence discovered by walking out of the station and not
+seeing your engine is an ambush.
+
+### Three wrong versions, and what each one taught
+
+**It measured against each truck's own bay.** The bays are 16 m apart, so parking neatly
+beside the apron rack read as *abandoned at 43 m*. The test has to be "did it get back to
+the station", against the apron rectangle — punishing somebody for parking in the wrong
+bay is not a consequence worth having.
+
+**It kept every truck exactly where the bell caught it.** That sounds like the GDD's
+"badly parked apparatus should create improvisation" and is not, because **the bell rings
+wherever you are**. A crew working a call at 9:58 ends the shift at that call, every time,
+on purpose — so "badly parked" was not a mistake anybody made, it was the default, and it
+applied to the careful player and the careless one identically. Wrecking a truck *is* a
+mistake and one you can see coming, so a truck drives itself home unless you have beaten
+it past `undriveableDamage`, in which case it sits where it died until the department has
+patched it back under the line. That repair is the countdown, and the homecoming hangs off
+it — the same unconditional-countdown rule the boarded buildings needed, for the third
+time in this codebase.
+
+**And the worst one: it banked the hose.** A hose line is tethered to its engine and lies
+on the ground the whole time it is being worked, which is indistinguishable from a dropped
+chainsaw to a rule that reads `carrier === null`. So **every shift that ever put water on a
+fire filed its own nozzle as lost kit**, and the next shift began with the engine unable to
+fight anything. Measured over six consecutive bot shifts: the hose out on every single one,
+**2 calls closed against a control's 7**, and the crew on foot for 570 seconds of a
+600-second shift. One line excluding it took the six-shift total from 2 to 9 — level with
+the control.
+
+That bug was only visible because the six-shift test has a **control arm**: the same seed,
+the same bot, with the carry-over wiped between shifts. Without it, "the town ends at 0%
+confidence" is a sentence about seed 55 rather than about the feature, and the first
+version of that assertion could not tell the difference.
+
+Measured after: a truck wrecked at 0.90 and abandoned reads `out@0.60 → in@0.30 → in`, kit
+is collected the morning after next, and the worst hand-over a shift can physically make —
+three trucks scattered and written off, every tank dry, eight tools in a field — still
+closes a call, at 21% town confidence against a clean station's 64%.
+
+`tools/m14-tests.js` — 88 assertions. `tools/_stationdiag.js` is the measurement.
+
+
 ## 2026-08-20 — weather, as a set of multipliers rather than an event
 
 The GDD asks for weather as "modifiers that generate and connect incidents rather than

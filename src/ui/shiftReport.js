@@ -7,7 +7,8 @@
  */
 
 import { CONFIG } from '../config.js';
-import { BUILDING_BY_ID } from '../data/town.js';
+import { BUILDING_BY_ID, describePlace, atStation, apparatusStaysOut } from '../data/town.js';
+
 import { describeWeather } from '../sim/weather.js';
 
 export function buildShiftReport(state) {
@@ -76,6 +77,26 @@ export function buildShiftReport(state) {
         .filter((d) => d.boardedShifts > 0 || d.damage >= 0.6),
       stillDamaged: damaged.filter((d) => d.damage > 0.02 && d.damage < 0.6),
       hydrantsOut: brokenHydrants.length,
+      /* Where the trucks and the kit are, if it is not where they belong.
+       *
+       * This is the one carry-over the player caused entirely by hand, so it is the one
+       * that most needs saying out loud the night before rather than being discovered at
+       * roll call. An engine at the far end of Main Street with 200 L in it is a
+       * decision about tomorrow; the same engine found by walking out of the station and
+       * not seeing it is an ambush. */
+      apparatusOut: state.apparatus
+        .filter((a) => apparatusStaysOut(a.x, a.y, a.damage,
+          CONFIG.town.stationTidyRadiusM, CONFIG.town.undriveableDamage))
+        .map((a) => ({ name: a.name, where: describePlace(a.x, a.y), waterL: Math.round(a.waterL) })),
+      damagedApparatus: state.apparatus
+        .filter((a) => a.damage > 0.05)
+        .map((a) => ({ name: a.name, damage: a.damage })),
+      // `engineId` excludes the hose: it is tethered to its appliance and lies on the
+      // ground whenever it is being worked. See game.js bankTheStation.
+      toolsOut: state.tools
+        .filter((t) => t.carrier === null && !t.engineId &&
+          !atStation(t.x, t.y, CONFIG.town.stationTidyRadiusM))
+        .map((t) => ({ name: t.name, where: describePlace(t.x, t.y) })),
       history: (state.town.history || []).slice(-3),
     },
   };

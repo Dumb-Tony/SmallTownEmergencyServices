@@ -225,6 +225,38 @@ export function blockingRectAt(cx, cy, r) {
 
 export function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 
+/**
+ * Did this get back to the STATION — not back to its own bay.
+ *
+ * Measured against the bay first, which made parking the engine neatly beside the apron
+ * rack read as "abandoned at 43 m": the bays are 16 m apart, so the westmost truck's bay
+ * is most of the apron away from the eastmost. Punishing somebody for parking in the
+ * wrong bay is not a consequence worth having. Distance to the apron RECTANGLE, so
+ * anywhere on the forecourt counts and Main Street does not.
+ *
+ * The radius is a parameter rather than a CONFIG read because this module imports
+ * nothing, and that is a property worth more than the convenience.
+ */
+export function atStation(x, y, radiusM) {
+  const a = STATION.apron;
+  const cx = Math.min(a.x + a.w, Math.max(a.x, x));
+  const cy = Math.min(a.y + a.h, Math.max(a.y, y));
+  return dist(x, y, cx, cy) <= radiusM;
+}
+
+/**
+ * Is this truck going to be here in the morning?
+ *
+ * ONE predicate, because the shift report and the save have to agree. They did not: the
+ * report listed anything away from the station and the save kept only what could not
+ * drive, so a crew that ended a shift at a call — which is what the last ten minutes of
+ * every shift look like — was warned about three trucks that then drove themselves home.
+ * A warning about something that does not happen is worse than no warning.
+ */
+export function apparatusStaysOut(x, y, damage, radiusM, undriveableDamage) {
+  return damage >= undriveableDamage && !atStation(x, y, radiusM);
+}
+
 export function nearestOf(list, x, y, filter = null) {
   let best = null, bestD = Infinity;
   for (const it of list) {

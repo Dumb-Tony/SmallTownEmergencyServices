@@ -16,7 +16,7 @@ import { GameClock } from './core/clock.js';
 import { EventBus } from './core/eventBus.js';
 import { Rng, hashStr } from './core/rng.js';
 import { loadTown, saveTown, advanceShift } from './core/persistence.js';
-import { STATION, BUILDING_BY_ID, HYDRANTS, dist } from './data/town.js';
+import { STATION, BUILDING_BY_ID, HYDRANTS, dist, atStation, apparatusStaysOut } from './data/town.js';
 import { APPARATUS_DEFS, APPARATUS_BY_ID, TOOL_DEFS, RACK_ITEMS } from './data/equipment.js';
 import {
   stepHazards, createFire, fireDamageFraction, resetHazardIds,
@@ -165,6 +165,27 @@ export function createInitialState({ seed, seedLabel, town }) {
   // Who is home tonight. Derived from the shift seed, on its own stream.
   resetResidentIds();
   state.residents = createResidents(new Rng((seed ^ 0x9e3779b9) >>> 0, 'residents'));
+
+  /* What last night left lying about.
+   *
+   * Applied as an OVERLAY over a fully-built default station rather than as a
+   * construction path of its own: a save that names a truck or a tool this build no
+   * longer has is simply ignored, and a save that names none of them leaves a station
+   * exactly as it was before any of this existed. There is one way to build a shift. */
+  for (const ap of state.apparatus) {
+    const rec = town.apparatus && town.apparatus[ap.id];
+    if (!rec) continue;
+    ap.damage = rec.damage || 0;
+    if (rec.home) continue;                 // re-parked and refilled: the bay values stand
+    ap.x = rec.x; ap.y = rec.y; ap.angle = rec.angle;
+    if (rec.waterL != null) ap.waterL = Math.min(ap.waterL, rec.waterL);
+  }
+  for (const t of state.tools) {
+    const rec = town.tools && town.tools[t.id];
+    if (!rec) continue;
+    t.carrier = null;                       // on the ground, where somebody put it down
+    t.x = rec.x; t.y = rec.y;
+  }
 
   return state;
 }
@@ -547,8 +568,12 @@ export class Game {
     /* "Recent weather" is in the GDD's persistence list, and it earns its place by doing
      * one job: tomorrow's roll knows what today was, and weights a repeat down. Two
      * identical shifts in a row is not weather, it is a constant. */
-    this.town = advanceShift(
-      { ...s.town, confidence: s.town.confidence, lastWeather: s.weather.id }, s.report.headline);
+    this.town = advanceShift({
+      ...s.town,
+      confidence: s.town.confidence,
+      lastWeather: s.weather.id,
+      ...bankTheStation(s),
+    }, s.report.headline);
     saveTown(this.town);
     this.bus.emit('SHIFT_ENDED', { report: s.report }, s.simTimeMs);
     this._notify();
@@ -558,6 +583,66 @@ export class Game {
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
 function clamp01(v) { return Math.min(1, Math.max(0, v)); }
+
+/**
+ * Where the trucks and the kit ended up — the GDD's "vehicle damage and location" and
+ * "equipment location and consumables".
+ *
+ * A truck near its own bay is tidied: re-parked, refilled, and stored as two fields.
+ * Anywhere else and it is stored where it stands, with what is left in the tank. Only
+ * tools lying on the GROUND are recorded — a saw stowed in a compartment rides with its
+ * truck and a spare on the apron rack is on the apron rack, and writing either of those
+ * down would be persisting the default.
+ *
+ * Nothing here decides whether that is fair. `stationTidyRadiusM` is the whole policy and
+ * it is one number in CONFIG.
+ */
+function bankTheStation(s) {
+  const apparatus = {};
+  for (const ap of s.apparatus) {
+    /* ⚠ A TRUCK COMES HOME UNLESS IT CANNOT DRIVE.
+     *
+     * The first version kept every truck exactly where the bell caught it, which sounds
+     * like the GDD's "badly parked apparatus should create improvisation" and is not:
+     * THE BELL RINGS WHEREVER YOU ARE. A crew working a call at 9:58 ends the shift at
+     * that call, every time, on purpose — so "badly parked" was not a mistake anybody
+     * made, it was the default, and it applied to the careful player and the careless one
+     * identically. Measured over six bot shifts: 2 calls closed against a control's 7,
+     * for behaviour the player could not have avoided.
+     *
+     * Wrecking a truck IS a mistake, and one you can see coming. So: drive it home unless
+     * you have beaten it up past `undriveableDamage`, in which case it sits where it died
+     * until the department has patched it back under the line. */
+    if (!apparatusStaysOut(ap.x, ap.y, ap.damage,
+      CONFIG.town.stationTidyRadiusM, CONFIG.town.undriveableDamage)) {
+      if (ap.damage > 0.001) apparatus[ap.id] = { home: true, damage: ap.damage };
+    } else {
+      apparatus[ap.id] = {
+        home: false, damage: ap.damage,
+        x: ap.x, y: ap.y, angle: ap.angle, waterL: Math.round(ap.waterL),
+      };
+    }
+  }
+  const tools = {};
+  for (const t of s.tools) {
+    if (t.carrier !== null) continue;                       // stowed, racked, or in a hand
+    /* ⚠ A HOSE IS NOT LOSE-ABLE KIT. It is tethered to its engine — `engineId`,
+     * `deployedM`, and a hard length limit — and while it is being worked its carrier is
+     * null and it lies on the ground, which is indistinguishable from a dropped chainsaw
+     * to the rule above. So every shift that ever put water on a fire banked its own
+     * nozzle as "left in a field", and the next shift began with the hose lying two
+     * hundred metres from the engine it belongs to.
+     *
+     * Measured before this line: six consecutive bot shifts, the hose out on every one,
+     * 2 calls closed against a control's 7, and the crew on foot for 570 of the 600
+     * seconds. The engine cannot fight a fire without its line, so the whole shift became
+     * a walk. It goes back on the appliance, like a hose does. */
+    if (t.engineId) continue;
+    if (atStation(t.x, t.y, CONFIG.town.stationTidyRadiusM)) continue;
+    tools[t.id] = { x: t.x, y: t.y };
+  }
+  return { apparatus, tools };
+}
 
 /** One responder's intent for one step. `prefix` selects that responder's key set —
  *  the same shape a network client would send, which is the point of routing every

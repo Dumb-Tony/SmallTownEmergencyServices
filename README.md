@@ -126,7 +126,14 @@ Things that are *systems*, not scripts, and therefore chain into each other:
 - a downed line stays live until it is killed **at the pole** — and water on the ground makes its live zone bigger;
 - a burning wreck next to a building is how a road call becomes a structure fire;
 - a trunk across the lane genuinely blocks the lane, so the shortest route stops being the shortest route;
-- flattening a hydrant with the engine puts it out of service — this shift and the next.
+- flattening a hydrant with the engine puts it out of service — this shift and the next;
+- and the station remembers. A truck you dented is slower next shift and gets patched up
+  over the two after that; a truck you **wrecked** is still sitting where you left it,
+  with whatever was in the tank, until it can drive again. Kit you put down in a field is
+  in that field tomorrow, and collected the morning after. The report names all of it the
+  night before, so it is a decision rather than a surprise — and a truck that was merely
+  *out on a call* when the bell went drives itself home, because finishing a job is not a
+  mistake.
 
 ## And no two nights are the same
 
@@ -262,6 +269,12 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   geometry, persistence, loadouts, movement, live frames, determinism. Section H2 greps
   every source file for `Math.random`, which `src/core/rng.js` claimed for months without
   anything behind it — and that is exactly how the audio layer came to be built on one.
+- `tools/m14-tests.js` — the station between shifts. What a truck's damage, position and
+  tank carry over, what gets collected and when, and the line between a consequence and an
+  ambush. Its six-shift soak has a CONTROL arm — same seed, same bot, carry-over wiped —
+  which is the only reason the worst bug in that milestone was visible: the hose line was
+  being banked as lost kit on every shift that fought a fire, which cost a bot crew five of
+  its seven closed calls. `tools/_stationdiag.js` is the measurement.
 - `tools/m13-tests.js` — the weather. Mostly about whether it is OBSERVABLE at all, which
   is the real failure mode for a modifier layer: a 20% multiplier on a number nobody was
   watching ships, reads well, and never changes a decision. It also holds the law —
@@ -331,8 +344,8 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**1255 assertions** — m0 146 · m1 113 · m2 57 · m3 99 · m4 59 · m5 31 · m6 42 · m7 35 ·
-m8 34 · m9 94 · m10 226 · m11 105 · m12 98 · m13 78 · boot-check 38.
+**1343 assertions** — m0 146 · m1 113 · m2 57 · m3 99 · m4 59 · m5 31 · m6 42 · m7 35 ·
+m8 34 · m9 94 · m10 226 · m11 105 · m12 98 · m13 78 · m14 88 · boot-check 38.
 
 Suites emit progressively, so a hang still reports how far it got.
 
