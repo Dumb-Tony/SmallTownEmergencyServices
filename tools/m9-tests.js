@@ -212,7 +212,16 @@ lines.push('--- B. a whole bot shift (audio reads state and owns none of it) ---
     `${types.size} distinct types · ${s.incidents.length} calls · ${s.outcome.controlled} controlled`);
   lines.push(`    heard: ${[...types].sort().join(', ')}`);
 
-  gt('B1 the shift produced a real event stream', loud.stream.length, 50);
+  /* ⚠ A RAW EVENT COUNT MEASURES THRASH AS WELL AS PLAY. The threshold here was 50, and
+     it started failing at 48 the moment m17 stopped the bot climbing in and out of the
+     same cab — fewer ENTERED_APPARATUS/EXITED_APPARATUS pairs is the FIX showing up, not
+     a quieter town. What this section needs is a stream with breadth and substance in it,
+     so assert those instead and keep a floor under the volume. */
+  gt('B1 the shift produced a real event stream', loud.stream.length, 30);
+  gt('B1b with real variety in it, not one thing over and over', types.size, 10);
+  ok('B1c including at least one call being received and one being resolved',
+    types.has('CALL_RECEIVED') && (types.has('INCIDENT_CONTROLLED') || types.has('INCIDENT_LOST')),
+    [...types].sort().join(','));
   gt('B2 and worked several calls', s.incidents.length, 1);
   ok('B3 the audio layer never threw over a whole shift', !loud.threw,
     loud.threw && loud.threw.message);

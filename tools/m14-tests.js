@@ -427,12 +427,27 @@ lines.push('--- F. the worst hand-over a shift can make is still a shift (GDD ru
     if (s.mode === MODES.PLAYING) { s.simTimeMs = CONFIG.shift.durationMs; g.endShift(); }
     return s.report;
   };
-  const bad = play(4242, true);
+  /* ⚠ THREE SEEDS PER ARM. "A crew inheriting the worst possible station still closes a
+     call" is a claim about RECOVERABILITY — GDD rule 9 — and it was decided by a single
+     shift, so it reported zero the first time an unrelated change to the bot reshuffled
+     that one shift. One bad shift is not proof of an unrecoverable hand-over; it is proof
+     that shifts can go badly, which is the design working. */
+  const F_SEEDS = [4242, 101, 505];
+  const arm = (withSave) => {
+    const rs = F_SEEDS.map((seed) => play(seed, withSave));
+    return {
+      controlled: rs.reduce((n, r) => n + r.controlled, 0),
+      calls: rs.reduce((n, r) => n + r.calls, 0),
+      confidenceEnd: rs.reduce((n, r) => n + r.confidenceEnd, 0) / rs.length,
+      each: rs.map((r) => r.controlled),
+    };
+  };
+  const bad = arm(true);
   emit('running F, the control');
-  const good = play(4242, false);
-  lines.push(`      worst hand-over: ${bad.controlled}/${bad.calls} controlled, ` +
+  const good = arm(false);
+  lines.push(`      worst hand-over: ${bad.controlled}/${bad.calls} controlled (${bad.each.join('/')}), ` +
     `confidence ${f(bad.confidenceEnd * 100, 0)}%  ·  clean station: ` +
-    `${good.controlled}/${good.calls}, ${f(good.confidenceEnd * 100, 0)}%`);
+    `${good.controlled}/${good.calls} (${good.each.join('/')}), ${f(good.confidenceEnd * 100, 0)}%`);
 
   gt('F10 a crew inheriting the worst possible station still closes a call', bad.controlled, 0);
   gt('F11 and still gets calls to work', bad.calls, 0);

@@ -297,7 +297,16 @@ Beyond the MVP scope, and in each case because a prior gate exposed the gap:
   fourth bay came out of: a fourth capability rather than a better engine, exactly as
   "additional apparatus broadens capability instead of providing percentage upgrades"
   above asks for. It carries 6000 L and no hose, so it can only feed the engine. Measured,
-  it is worth nothing on a single call and 114 seconds on the third one of a shift;
+  it is worth nothing on a single call and 114 seconds on the third one of a shift. And
+  the crew-size measurement that asked for it turned out to be reading through a broken
+  instrument: the bot every playability claim in this project rests on spent 345 seconds of
+  a 600 second shift ON FOOT, because all four seats were taking the same truck, driving at
+  building doors and riding to the clinic together. Eleven bugs later the median response
+  time is 15 s rather than 64 s and a volunteer spends 216 s of a shift on foot rather than
+  345. The town still loses two thirds of its calls, which is now a statement about the
+  town — and one number still points the wrong way: four hands close FEWER calls than two,
+  while measurably spread across the town rather than piled on one call. Whatever the
+  fourth volunteer is for, the current answer is not it;
 - **a synthesised audio layer** whose mix is a pure function of state;
 - **residents** — the GDD's `NPCs` core system. Every building has people in it who get
   themselves out of a burning one faster than the crew can cross town, so what the player

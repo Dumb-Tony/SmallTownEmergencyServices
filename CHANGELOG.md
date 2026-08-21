@@ -1,5 +1,185 @@
 # Changelog
 
+## 2026-08-21 — the instrument was the problem
+
+Every playability claim this project has ever made was measured through `tools/_crewbot.js`
+— "a crew that turns up beats one that does not", "two beat one", "four beat one", "the
+tanker saves a refill trip". So when m15 reported that a crew of four closes about as many
+calls as a crew of two, there were two explanations and no way to tell them apart: the town
+has nothing for the fourth pair of hands, or **the bot is bad at the game**.
+
+`tools/_losediag.js` was written to ask. It runs three four-hand shifts and writes down
+every call — when it came in, when boots first hit the ground, how it ended and why — plus
+a per-seat time budget classified from state rather than from what the bot believes it is
+doing, and every jam with the distance to the nearest other appliance.
+
+The first run answered in one line: **3% of a volunteer's shift was spent doing the job and
+77% getting there, and 345 seconds of a 600 second shift were spent ON FOOT** — against 90
+driving. Four people, four trucks, walking.
+
+### Eleven bugs, none of them visible in a diff
+
+1. **All four seats took Engine 1.** `|| s.apparatus[0]` was the fallback whenever the
+   planned truck did not resolve, and `s.apparatus[0]` is the engine. Four volunteers
+   standing in one place — which is where a shared trip back for the medkit puts them — all
+   found the same truck. Three were passengers; all four ran the steering code; all four
+   watched the truck not move, counted four `wedged; backing off` escapes against
+   themselves, hit the give-up latch and walked. The log shows it happening inside eight
+   seconds, on all four seats at once.
+2. **The bot drove at the front door.** An incident's coordinate is a building's door, and
+   a door is against a wall. 324 jams over three shifts, **82% of them nowhere near another
+   appliance** — the crew driving into the scenery.
+3. **`E` boards the nearest truck, not the one you meant.** Standing between two, the bot
+   climbed into the wrong one, bounced out because it had a driver, and did that eight
+   times in one second.
+4. **Everyone went to the same call.** `free.length ? free : open` sent every spare seat to
+   the same job whenever there were fewer open calls than seats, and the convoy deadlocked.
+5. **A passenger is not a driver — and `driverId` goes null when the driver gets out.**
+   `interaction.js` gives the wheel to whoever boards first and hands it to nobody when
+   they leave, and pressing `E` while aboard is what gets you *out*, so a passenger cannot
+   promote themselves. Riders sat in parked trucks holding steering keys the game was not
+   listening to.
+6. **"A patient in the back outranks everything" outranked the crew rota too.** Every bot
+   saw the loaded ambulance, every bot decided the clinic run was the most important thing
+   in town, and every bot got in. Two of three shifts ended with all four volunteers
+   sitting in Medic 1 at the identical distance from the station: **58,611 apparatus-frames
+   with more than one person aboard**.
+7. **And a passenger waited for the truck to stop before getting out.** Braking first is
+   right for the driver and a deadlock for a rider, whose brake key is connected to
+   nothing: 24.8 seconds spent riding along holding a pedal that was not there.
+8. **The router knew about fallen trees and not about wrecked cars** — which is the thing a
+   crash call actually puts in the road. When no route exists `routeThrough` returns "go
+   direct", and go direct means straight through the obstruction. Traced: an ambulance with
+   a patient in the back stuck ten metres from `wrk_3` at the Oak Street junction for
+   eighty-three seconds, rocking between +6 and −4 m/s, while the casualty ran down.
+9. **Arriving was a loop.** Getting out is allowed within 11 m of the parking spot and being
+   "on scene" means within 26 m of the call, so a spot further than about fourteen metres
+   out let the bot dismount, immediately decide it had not arrived, and climb back in.
+   m2's seed 9002: **584 boardings in one shift**, five hundred of them inside forty
+   seconds — "taking Rescue 1 / on scene / taking a medkit", over and over. Now 6.
+
+### What it was worth
+
+Four hands, before and after:
+
+| | before | after |
+|---|---|---|
+| median response time | 64 s | **15 s** |
+| mean response to a call that was LOST | 98 s | **49 s** |
+| of a 600 s shift, on foot | 345 s | **216 s** |
+| of a 600 s shift, driving | 90 s | **201 s** |
+| jams per seat-shift | 27.0 | **3.3** |
+| apparatus-frames with two in one cab | 58,611 | a stumble, never over 3 s |
+| boardings in one solo shift (m2 seed 9002) | 584 | **6** |
+
+The medical chain moved with it: m5 went from *reached 4 · treated 1 · loaded 0 ·
+delivered 0* to delivering on every seed, and the share of the town's casualties who die
+went **down** with a second volunteer — 26% → 14% over five seeds — which is what that gate
+claimed in the first place and had never been able to show on two.
+
+The town still loses roughly two thirds of its calls. That is now a statement about the
+town rather than about the bot, which is the entire point: `tools/m17-tests.js` holds the
+instrument still so the next milestone can move the game.
+
+### Three fixes that made things worse, and were reverted
+
+Kept because each was a plausible idea that measurement killed.
+
+- **Park at the kerb.** The obvious correction to "drove at the front door", and it broke
+  every suite that fights a fire: the hose is tethered to its engine at 34 m and Miller
+  Barn is 40 m from the nearest road, so the crew parked out of reach of their own
+  equipment. m2 reported **0.4 L of water put on anything all shift**; m13 closed zero
+  calls in all five weather conditions; m5's one-person medical call became unwinnable. The
+  answer is neither the door nor the kerb: stop twelve metres *outside* the door, on the
+  side it faces.
+- **Two hands on every call, three with a casualty.** More generous, worse on every number:
+  three trucks held station 0.5 m apart for thirty seconds, the slowest response went
+  56 s → 340 s. Capping at one instead broke the Phase 5 exit gate the other way — a
+  downed pole with a trapped driver is three jobs and a pair were never allowed to stand on
+  it together. The rule that works counts the jobs `pickJob` can actually hand out, and
+  **a pinned casualty is two of them**: `farm_entrapment` carries no hazard object at all,
+  so counting hazards read the design's own two-player showcase as a one-person call, and
+  m5 reported "solo lost at 155s, two crew lost at 155s" — identical to the second, because
+  the second volunteer was never allowed to go.
+- **Standing by means stopping.** Returning `null` froze the bot where it stood, which for
+  three spare seats meant three trucks abandoned in the carriageway; truck-on-truck jams
+  went from 49% to 97% on that change alone. Standing by is a *place*, and the place is the
+  station.
+
+### Two assertions changed, and why
+
+Neither was weakened to make a change pass; both were measuring the wrong thing.
+
+- **m5 D3 counted the dead, which rewards neglect.** A call nobody attends is written off on
+  danger, and its casualties then stop being simulated — so they never register as lost, and
+  the volunteer who ignored more of the town is flattered for it. D3 now asserts the share
+  of casualties **reached**, D3b the share that **dies**, as a rate, and D3c the absolute
+  count underneath it so "lose everybody faster" cannot pass. Over five seeds all three
+  agree, which is the part worth noticing: on two seeds this gate had flickered in both
+  directions on identical code, and the fix was more shifts rather than a softer claim.
+- **m9 B1 counted raw events.** It failed at 48 against a threshold of 50 the moment the bot
+  stopped climbing in and out of the same cab — fewer `ENTERED_APPARATUS`/`EXITED_APPARATUS`
+  pairs is the fix showing up, not a quieter town. It now asserts breadth (10+ distinct
+  event types) and substance (a call received and a call resolved) with a floor under the
+  volume.
+
+### And the thing that kept the gates honest: more shifts
+
+Every change to the bot re-rolls every seeded shift, so the outcome gates flickered — m2's
+"at least two different families were closed" and m5's Phase 5 exit gate both failed and
+passed on the *same* code depending on which fix landed last. The temptation each time was
+to weaken the claim. The right answer was a bigger sample: **m2 now runs four seeds instead
+of two and m5 five instead of two**, and the gates stopped moving.
+
+The widened sample also settled the argument about m5 D3. Over two seeds a second volunteer
+appeared to lose *more* casualties than a lone one; over five it loses fewer, both as a
+share (26% → 14%) and outright (6 → 3), which is what the gate claimed in the first place.
+Two shifts is not a sample, it is an anecdote.
+
+### Two more the widened samples then found
+
+Both were invisible while every gate ran on one or two shifts.
+
+- **The volunteer who never got to a truck.** Choosing the appliance fresh every frame is
+  fine when one is parked at your elbow and ruinous when the nearest is two hundred metres
+  away: the call list re-ranks, the planned truck changes with it, and the volunteer turns
+  round and starts again. m14's worst-possible-hand-over shift — every truck abandoned
+  across the valley, every tool dumped in one heap — measured **one boarding in ten minutes
+  and 380 seconds of walking**, six calls taken and none reached. Once you have set off on
+  foot for a truck, that is the truck.
+- **A cap that counts names instead of hands.** Limiting a call to as many volunteers as it
+  has jobs is right; counting everyone who has merely *named* it is not, because a
+  volunteer three hundred metres away and still driving then blocks one standing twenty
+  metres from the scene. Loosening it to only count people within 60 m of the call was
+  worse in the other direction — everybody converged again and the jam rate tripled — so
+  the cap counts claims and the claim is released the moment somebody re-plans.
+
+### And the number that is still wrong
+
+`tools/m15-tests.js` G5 used to read "four people do not simply all stand at the same
+fire", and inferred it from the scoreline. It is now measured directly — the crew's mean
+pairwise separation, sampled once a second all shift — and the answer is **89 m with four
+volunteers against 88 m with two**. They are not standing together. The named failure mode
+is definitively not happening.
+
+What *is* happening is that four hands close **9 calls to two hands' 15**, consistently,
+over four seeds. That is the opposite of what the fourth pair of hands is for, and it is
+printed in the suite output as an open question rather than smoothed into a softer
+assertion. The fourth volunteer is being spent badly, not duplicated — seat four in
+particular boards one truck, jams four times out in the town, gives up on driving and
+works a single call for the rest of the shift. That is the next milestone, and it now has
+a measurement waiting for it.
+
+### Test counts
+- `tools/m17-tests.js` — 30 assertions: kerbside approach spots checked against every door
+  in the real town, four seats never in one cab for more than a moment, the response-time
+  gate, the jam rate, and the spare seat going back to quarters. `tools/_losediag.js` is
+  the measurement it came out of, and stays in the tree as the thing to re-run.
+- **1598 assertions** across 19 suites — m0 149 · m1 113 · m2 81 · m3 102 · m4 59 · m5 33 ·
+  m6 42 · m7 35 · m8 34 · m9 96 · m10 256 · m11 105 · m12 98 · m13 78 · m14 88 · m15 108 ·
+  m16 53 · m17 30 · boot-check 38. Most of the rise is the widened seed sets in m2, m5,
+  m13, m14 and m15 — more shifts, not more claims.
+
 ## 2026-08-21 — Tanker 1, and three wrong reasons for it
 
 The previous milestone measured a crew of four and found the fourth pair of hands had

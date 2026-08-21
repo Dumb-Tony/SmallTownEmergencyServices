@@ -372,9 +372,26 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   HUD renders. It asserts the game's own thesis by running an idle control shift on the
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
+- `tools/m17-tests.js` — **the instrument, audited.** Every playability claim above is
+  measured through that bot, so when m15 reported that four hands close no more calls than
+  two there were two possible explanations and no way to separate them: the town has
+  nothing for the fourth pair, or the bot is bad at the game. `tools/_losediag.js` asked,
+  and answered in one line — **3% of a volunteer's shift was spent doing the job and 345
+  seconds of 600 were spent on foot**, with four people and four trucks. Eleven bugs came out
+  of it, including all four seats piling into Engine 1, the bot driving at building doors
+  because that is where an incident's coordinate is, and the whole crew riding to the
+  clinic together in the ambulance and never getting out. Median response time 64 s → 15 s;
+  jams per seat-shift 27 → 3.3; 345 s on foot → 216 s. The town still loses two thirds of
+  its calls, which is now a fact about the town rather than about the instrument.
 
-**1539 assertions** — m0 149 · m1 113 · m2 57 · m3 102 · m4 59 · m5 31 · m6 42 · m7 35 ·
-m8 34 · m9 94 · m10 256 · m11 105 · m12 98 · m13 78 · m14 88 · m15 107 · m16 53 ·
+  It also left one number pointing the wrong way, printed in m15's own output rather than
+  smoothed over: **four hands close fewer calls than two.** They are measurably spread over
+  the town — 89 m mean separation against a pair's 88 — so they are not all standing at
+  the same fire; the fourth volunteer is being spent badly rather than duplicated. That is
+  the next milestone, and it now has a measurement waiting for it.
+
+**1598 assertions** — m0 149 · m1 113 · m2 81 · m3 102 · m4 59 · m5 33 · m6 42 · m7 35 ·
+m8 34 · m9 96 · m10 256 · m11 105 · m12 98 · m13 78 · m14 88 · m15 108 · m16 53 · m17 30 ·
 boot-check 38.
 
 Suites emit progressively, so a hang still reports how far it got.

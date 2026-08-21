@@ -65,7 +65,13 @@ const CMD = (over = {}) => ({
   interact: false, drop: false, use: false, siren: false, slot: null, ...over,
 });
 
-const SEEDS = [[9001, 'play_a'], [9002, 'play_b']];
+/* ⚠ FOUR SEEDS, NOT TWO. Section C asks whether each verb can produce a result and
+   section D whether a crew beats an idle control — both claims about a stochastic town,
+   asserted on a sample of two. Every change to the bot re-rolls the whole shift, and
+   "at least two different families were closed" duly flickered on a run where the solo
+   bot happened to draw two fires. Widening the sample is the fix; tuning until the two
+   seeds agree is how a gate becomes decoration. */
+const SEEDS = [[9001, 'play_a'], [9002, 'play_b'], [9003, 'play_c'], [9004, 'play_d']];
 const runs = [];
 
 /* ── A. the bot can play a shift at all ──────────────────────────────────── */

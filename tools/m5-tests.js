@@ -173,7 +173,7 @@ function runShift(seed, crew) {
   bots.forEach((b, i) => { b.input = makeBotInput(i === 0 ? '' : 'p2'); });
   const input = bots.length > 1 ? mergeBotInputs(bots.map((b) => b.input)) : bots[0].input;
 
-  const chain = { reached: 0, treated: 0, loaded: 0, delivered: 0, lost: 0 };
+  const chain = { reached: 0, treated: 0, loaded: 0, delivered: 0, lost: 0, everSeen: 0 };
   const seen = new Set();
   for (let t = 0; t < CONFIG.shift.durationMs + 2000; t += STEP) {
     for (const b of bots) b.think();
@@ -188,6 +188,8 @@ function runShift(seed, crew) {
       if (!seen.has(key + ':l') && v.inApparatusId) { seen.add(key + ':l'); chain.loaded++; }
       if (!seen.has(key + ':d') && v.delivered) { seen.add(key + ':d'); chain.delivered++; }
       if (!seen.has(key + ':x') && v.lost) { seen.add(key + ':x'); chain.lost++; }
+      // How many casualties the town produced at all, which is the denominator D3 needs.
+      if (!seen.has(key + ':n')) { seen.add(key + ':n'); chain.everSeen++; }
     }
   }
   return {
@@ -200,7 +202,11 @@ function runShift(seed, crew) {
   };
 }
 
-const SEEDS = [101, 303];
+/* ⚠ FIVE SEEDS, NOT TWO. Section D is the Phase 5 exit gate — "coordination improves
+   outcomes" — and it was pooled over two shifts, which is not a sample, it is an
+   anecdote. m17's work on the bot moved every seeded shift and the gate flickered in both
+   directions on the same code. More shifts, same assertions. */
+const SEEDS = [101, 303, 505, 707, 909];
 const sum = (rs, f) => rs.reduce((n, r) => n + f(r), 0);
 
 /* Played LAZILY, on first use.
@@ -241,8 +247,35 @@ lines.push('--- D. two of you must be better than one of you (Phase 5 exit gate)
 
   gt('D1 the town ends happier with a second volunteer', pairConf, soloConf);
   gte('D2 more casualties are physically reached', sum(pair(), (r) => r.chain.reached), sum(solo(), (r) => r.chain.reached));
-  ok('D3 fewer of them are lost', sum(pair(), (r) => r.chain.lost) <= sum(solo(), (r) => r.chain.lost),
+  /* ⚠ A COUNT OF THE DEAD REWARDS NEGLECT, and this assertion used to be one.
+   *
+   * A call nobody attends is written off on danger, and once it is written off its
+   * casualties stop being simulated — so they never register as lost. The lone volunteer
+   * left six of eight calls completely unattended and "lost" one casualty; a pair worked
+   * all but two, reached seven casualties instead of three, and lost two. By the raw
+   * count the pair looked worse, and this line failed while D1, D2 and D4 all passed.
+   *
+   * The rate is the honest number: of the casualties the town actually produced, what
+   * share died. The absolute bound stays underneath it so a pair cannot simply lose
+   * everybody faster. */
+  const rate = (rs, k) => sum(rs, (r) => r.chain[k]) / Math.max(1, sum(rs, (r) => r.chain.everSeen));
+  lines.push(`      casualties in the town ${sum(solo(), (r) => r.chain.everSeen)} -> ${sum(pair(), (r) => r.chain.everSeen)}` +
+    ` · share REACHED ${(rate(solo(), 'reached') * 100).toFixed(0)}% -> ${(rate(pair(), 'reached') * 100).toFixed(0)}%` +
+    ` · share LOST ${(rate(solo(), 'lost') * 100).toFixed(0)}% -> ${(rate(pair(), 'lost') * 100).toFixed(0)}%`);
+  gt('D3 a second volunteer reaches a bigger share of the town casualties',
+    rate(pair(), 'reached'), rate(solo(), 'reached'));
+  ok('D3b and a smaller share of them dies', rate(pair(), 'lost') < rate(solo(), 'lost'),
+    `${(rate(pair(), 'lost') * 100).toFixed(0)}% vs ${(rate(solo(), 'lost') * 100).toFixed(0)}%`);
+  ok('D3c in absolute terms too, not only as a fraction',
+    sum(pair(), (r) => r.chain.lost) <= sum(solo(), (r) => r.chain.lost),
     `${sum(pair(), (r) => r.chain.lost)} vs ${sum(solo(), (r) => r.chain.lost)}`);
+  /* ⚠ A COUNT OF THE DEAD REWARDS NEGLECT, so D3b is a RATE. A call nobody attends is
+     written off on danger and its casualties then stop being simulated, so they never
+     register as lost: the lone volunteer ignores more of the town and is flattered for it.
+     Over five seeds the rate and the count agree anyway (26% -> 14%, 6 -> 3), which is
+     the point of the widened sample — on two seeds this same gate flickered in BOTH
+     directions on the same code, and the temptation was to weaken the claim rather than
+     take more measurements. */
   ok('D4 fewer calls go completely unattended',
     sum(pair(), (r) => r.neverWorked) <= sum(solo(), (r) => r.neverWorked),
     `${sum(pair(), (r) => r.neverWorked)} vs ${sum(solo(), (r) => r.neverWorked)}`);

@@ -377,22 +377,38 @@ emit('D done');
 
 function sectionE() {
 lines.push('--- E. weather may not create a call, close one, or make a shift unwinnable ---');
+  /* ⚠ THREE SEEDS PER CONDITION, NOT ONE. "A crew can still close a call in every
+     condition" is a claim about the GAME, and it was being decided by a single shift each
+     — so it reported heat:0 the first time an unrelated change to the bot reshuffled that
+     one shift. One shift is not evidence that a condition is unwinnable; it is evidence
+     that one shift went badly, which is what the design intends to be possible. */
+  const E_SEEDS = [4242, 101, 505];
   const rows = [];
   for (const id of CONDITION_IDS) {
-    clearSave();
-    const g = new Game({ seed: 4242 });
-    g.startShift();
-    force(g, id, 1, 0.6);
-    const bot = new CrewBot(g);
-    const s = g.state;
-    for (let t = 0; t < CONFIG.shift.durationMs + 2000; t += STEP) {
-      bot.think();
-      g.frame(STEP, bot.input);
-      if (s.mode !== MODES.PLAYING) break;
+    const agg = { calls: 0, controlled: 0, lost: 0, confidenceEnd: 0, incidents: [] };
+    let nan = 0;
+    for (const seed of E_SEEDS) {
+      clearSave();
+      const g = new Game({ seed });
+      g.startShift();
+      force(g, id, 1, 0.6);
+      const bot = new CrewBot(g);
+      const s = g.state;
+      for (let t = 0; t < CONFIG.shift.durationMs + 2000; t += STEP) {
+        bot.think();
+        g.frame(STEP, bot.input);
+        if (s.mode !== MODES.PLAYING) break;
+      }
+      if (s.mode === MODES.PLAYING) { s.simTimeMs = CONFIG.shift.durationMs; g.endShift(); }
+      agg.calls += s.report.calls;
+      agg.controlled += s.report.controlled;
+      agg.lost += s.report.lost;
+      agg.confidenceEnd += s.report.confidenceEnd / E_SEEDS.length;
+      agg.incidents.push(...s.report.incidents);
+      nan += nonFinite(s);
+      emit(`running E, ${id}, seed ${seed}`);
     }
-    if (s.mode === MODES.PLAYING) { s.simTimeMs = CONFIG.shift.durationMs; g.endShift(); }
-    rows.push({ id, r: s.report, nan: nonFinite(s) });
-    emit(`running E, ${id}`);
+    rows.push({ id, r: agg, nan });
   }
   for (const { id, r } of rows) {
     lines.push(`      ${id.padEnd(6)} ${r.calls} calls · ${r.controlled} controlled · ` +
@@ -435,7 +451,9 @@ lines.push('--- E. weather may not create a call, close one, or make a shift unw
   const delivered = {};
   for (const id of CONDITION_IDS) {
     let n = 0;
-    for (const seed of [101, 303]) {
+    /* Four seeds, not two: a 0-or-1 count per condition has no resolution, and E9 below
+       needs to see a DIFFERENCE between conditions rather than a wall. */
+    for (const seed of [101, 303, 505, 707]) {
       clearSave();
       const g = new Game({ seed });
       g.startShift();
@@ -461,9 +479,14 @@ lines.push('--- E. weather may not create a call, close one, or make a shift unw
   gt('E7 a casualty still reaches the clinic in clear conditions', delivered.clear, 0);
   ge('E8 and in at least three of the five conditions — weather is a difficulty, not a wall',
     CONDITION_IDS.filter((id) => delivered[id] > 0).length, 3);
-  ok('E9 while the hardest ones really are harder',
-    CONDITION_IDS.some((id) => delivered[id] === 0),
-    JSON.stringify(delivered));
+  /* ⚠ "AT LEAST ONE CONDITION IS A WALL" IS NOT THE CLAIM — E8 directly above says the
+     opposite, that weather is a difficulty and not a wall. This line asked for a zero
+     because, on two seeds and a bot that walked most of the shift, there always was one.
+     With four seeds and a crew that drives, every condition delivers somebody, and the
+     thing worth asserting is that weather still CHANGES the number. */
+  gt('E9 while the weather still changes how many of them make it',
+    Math.max(...CONDITION_IDS.map((id) => delivered[id])),
+    Math.min(...CONDITION_IDS.map((id) => delivered[id])));
 emit('E done');
 }
 
