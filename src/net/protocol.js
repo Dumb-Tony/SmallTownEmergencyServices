@@ -19,6 +19,7 @@
 import { BUILDINGS, BUILDING_BY_ID } from '../data/town.js';
 import { buildFireCells } from '../sim/hazards.js';
 import { RESIDENT_STATES } from '../sim/residents.js';
+import { CREW } from '../data/crew.js';
 import { CONDITION_IDS } from '../sim/weather.js';
 
 /** Buildings by position in the authored table. The town is data, both ends load the same
@@ -28,13 +29,13 @@ const BUILDING_IX = BUILDINGS.map((b) => b.id);
 
 export const MSG = Object.freeze({
   HELLO: 'hello',     // client -> host, on connect
-  WELCOME: 'welcome', // host -> client, "you are r2"
+  WELCOME: 'welcome', // host -> client: which volunteer you are, and the token that buys the seat back
   CMD: 'cmd',
   SNAP: 'snap',
   BYE: 'bye',
 });
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /* ── numbers ──────────────────────────────────────────────────────────────
  * Everything positional is quantised to centimetres and sent as an integer. A town
@@ -184,7 +185,17 @@ export function applySnapshot(state, snap) {
     r.inVehicleId = d.v || null; r.toolId = d.tl || null;
     r.draggingVictimId = d.dg || null; r.stunMs = d.st; r.soot = u3(d.so);
     r.useProgressMs = d.up; r.insideBuildingId = d.ib || null;
-    if (!r.tint) { r.tint = d.i === 'r2' ? '#5fd0f0' : '#f6c445'; r.name = d.i === 'r2' ? 'Partner' : 'You'; }
+    /* Look the identity up in the crew table rather than branching on 'r2'.
+     *
+     * The two-crew version read `d.i === 'r2' ? partner : you`, which does not fail on a
+     * third volunteer — it quietly paints them in the HOST'S OWN COLOUR and calls them
+     * "You". Two people in the same coat, one of them yours, is the exact confusion the
+     * tints exist to prevent, and a ternary is how a two-case rule becomes a bug the
+     * moment there is a third case. */
+    if (!r.tint) {
+      const spec = CREW.find((c) => c.id === d.i) || CREW[0];
+      r.tint = spec.tint; r.name = spec.name; r.prefix = spec.prefix;
+    }
   });
 
   syncList(state.apparatus, snap.ap, (d) => ({ id: d.i, defId: d.i }), (a, d) => {

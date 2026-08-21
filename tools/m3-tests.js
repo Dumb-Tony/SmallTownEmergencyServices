@@ -279,10 +279,27 @@ lines.push('--- D. disconnects, versions, and nothing left holding the bag ---')
 
   cl.close();                                   // the partner's browser closes
 
+  /* A DROP IS NOT A DEPARTURE, and both halves of that are load-bearing.
+   *
+   * The seat is held first: a ten-minute shift means most dropped links are the same
+   * person about to reconnect, and dumping their nozzle on the floor for a three-second
+   * blip is worse than waiting. But held FOR EVER is the older bug this suite was written
+   * to catch — a body standing in the street with the only medical kit for the rest of
+   * the shift. So the seat expires, and the expiry does exactly what signing off does. */
+  eq('D1a the seat is held at first — they may be three seconds from being back',
+    s.responders.length, 2);
+  eq('D1b and their kit is still theirs while it is held', tool.carrier, r2.id);
+  ok('D1c the host says the seat is being held, not that they left',
+    /dropped/.test(hostNet.status), hostNet.status);
+
+  // ...and then nobody comes back.
+  for (let t = 0; t < CONFIG.net.reconnectGraceMs + 1000; t += 100) hostNet.pump(100, null);
+
   eq('D1 the crew is back to one', s.responders.length, 1);
   eq('D2 the tool they were holding is on the ground', tool.carrier, null);
   eq('D3 the patient they were dragging is put down', v.draggedBy, null);
-  eq('D4 the host says so', hostNet.status, 'partner left');
+  ok('D4 and the host says they did not come back',
+    /did not come back/.test(hostNet.status), hostNet.status);
   ok('D5 no stale command is left driving a responder that no longer exists',
     Object.keys(s.net.remoteCommands).length === 0);
 

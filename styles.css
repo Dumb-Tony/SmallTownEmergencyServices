@@ -225,6 +225,13 @@ kbd {
 .who { font-weight: 700; font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; }
 .crewsep { display: inline-block; width: 1px; height: 14px; margin: 0 10px;
            background: var(--line); vertical-align: middle; }
+.crewsep.tight { margin: 0 6px; }
+
+/* The crew row has two forms and only ever shows one. On anything with room, every other
+   volunteer gets a glance; on a phone, four glances is 390 px of bar on a 390 px screen —
+   measured, it wrapped onto a second row and landed on top of the coach line — so the
+   phone gets a count instead, in words, with how many of them are mid-job. */
+.crewcount { display: none; color: var(--dim); }
 .chip.dim { color: var(--dim); }
 .card .keys .coopkeys { grid-column: 1 / -1; color: var(--violet); }
 
@@ -299,6 +306,11 @@ kbd {
 @media (max-width: 700px), (max-height: 480px) {
   #topbar { gap: 4px; padding: 5px 6px; font-size: 11px; flex-wrap: wrap; }
   #topbar .pill { padding: 3px 7px; font-size: 11px; }
+  /* Four glances is 390 px of bar on a 390 px screen. The count says the same thing in
+     the space there is, and the words carry it — a phone player cannot act on the third
+     volunteer's water anyway. */
+  #vehicle .glance, #vehicle .crewsep:not(.tight) { display: none; }
+  #vehicle .crewcount { display: inline; }
   #calls { max-width: 52vw; width: auto; right: 6px; box-sizing: border-box; font-size: 11px; top: 42px; }
   #calls.expanded { width: auto; max-width: 62vw; }
   #calls li { padding: 4px 6px; }

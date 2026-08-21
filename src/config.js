@@ -166,6 +166,20 @@ export const CONFIG = {
     declineLiveMul: 1.7,
   },
 
+  /* ── the network (src/net/net.js) ──────────────────────────────────────── */
+  net: {
+    /* How long a dropped volunteer's seat is held before the town gives up on them.
+     *
+     * Both ends of this are real failures. Signing somebody off the instant their link
+     * blips drops whatever they were holding on the floor and puts a casualty down in the
+     * road, for a three-second reconnect. Holding the seat FOR EVER leaves a body standing
+     * in the street with the only nozzle for the rest of the shift, which is the orphaned
+     * -kit bug the two-player build was explicitly written to prevent. A shift is ten
+     * minutes; 45 seconds is long enough for a reconnect and short enough that the crew is
+     * not a person down for most of the job. */
+    reconnectGraceMs: 45000,
+  },
+
   /* ── weather (src/sim/weather.js) ──────────────────────────────────────── */
   weather: {
     /* A shift's condition is drawn once, from its own stream, and every modifier is a

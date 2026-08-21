@@ -18,6 +18,7 @@ import { Rng, hashStr } from './core/rng.js';
 import { loadTown, saveTown, advanceShift } from './core/persistence.js';
 import { STATION, BUILDING_BY_ID, HYDRANTS, dist, atStation, apparatusStaysOut } from './data/town.js';
 import { APPARATUS_DEFS, APPARATUS_BY_ID, TOOL_DEFS, RACK_ITEMS } from './data/equipment.js';
+import { CREW, MAX_CREW } from './data/crew.js';
 import {
   stepHazards, createFire, fireDamageFraction, resetHazardIds,
 } from './sim/hazards.js';
@@ -42,12 +43,10 @@ export const MODES = Object.freeze({
   TITLE: 'title', PLAYING: 'playing', PAUSED: 'paused', REPORT: 'report',
 });
 
-/** Who is on the crew, and which keys drive them. Two on one keyboard for now; the
- *  seam a network client would take is the same one — a per-responder command. */
-export const CREW = Object.freeze([
-  { id: 'r1', name: 'You',     tint: '#f6c445', prefix: '' },
-  { id: 'r2', name: 'Partner', tint: '#5fd0f0', prefix: 'p2' },
-]);
+/* The crew table lives in src/data/crew.js, with the town and the equipment — see the
+ * header there for why it had to leave this file. Re-exported so that every existing
+ * caller, test and diagnostic that imports CREW from game.js keeps working. */
+export { CREW, MAX_CREW } from './data/crew.js';
 
 export function makeResponder(index) {
   const spec = CREW[index];
@@ -539,6 +538,10 @@ export class Game {
 
   removeResponder() { return toggleCoop(this.state); }
 
+  /** Seat and unseat by NAME, for the netcode. The P key still goes through toggleCoop. */
+  seatResponder(id) { return id ? seatResponder(this.state, id) : null; }
+  unseatResponder(id) { return unseatResponder(this.state, id); }
+
   endShift() {
     const s = this.state;
     if (s.mode === MODES.REPORT) return;
@@ -649,7 +652,12 @@ function bankTheStation(s) {
  *  responder through here rather than reading the keyboard in the movement code. */
 export function readCommand(input, prefix = '') {
   const a = (name) => (prefix ? prefix + name[0].toUpperCase() + name.slice(1) : name);
-  if (!input) {
+  /* ⚠ NULL PREFIX MEANS NO KEYBOARD REACHES THIS SEAT, and it is not the same as ''.
+   * The `a()` above is falsy-tested, so r3 with a null prefix would read r1's bare action
+   * names and two crew members would share one set of keys — the per-seat input
+   * collapsing to seat 0 that this tree has already shipped once elsewhere. r3 and r4
+   * exist only over the wire, and a wire command never comes through here. */
+  if (!input || prefix === null) {
     return { axis: { x: 0, y: 0 }, drive: { throttle: 0, steer: 0 }, aim: null, interact: false, drop: false, use: false, siren: false, slot: null };
   }
   const axis = input.moveAxis(prefix);
@@ -682,26 +690,58 @@ export function readCommand(input, prefix = '') {
 }
 
 /** Bring the second responder on or send them home. Drop-in, mid-shift. */
-export function toggleCoop(state) {
-  if (state.responders.length > 1) {
-    const gone = state.responders.pop();
-    // Never let someone leave holding the only nozzle, or dragging a patient.
-    for (const t of state.tools) if (t.carrier === gone.id) { t.carrier = null; t.x = gone.x; t.y = gone.y; }
-    for (const v of state.victims) if (v.draggedBy === gone.id) v.draggedBy = null;
-    for (const ap of state.apparatus) {
-      if (ap.driverId === gone.id) ap.driverId = null;
-      ap.passengerIds = ap.passengerIds.filter((id) => id !== gone.id);
-    }
-    delete state.net.remoteCommands[gone.id];
-    state.coop = false;
-    return false;
-  }
-  const r = makeResponder(state.responders.length);
-  r.x = state.responders[0].x + 2.6;
-  r.y = state.responders[0].y;
+/**
+ * Sign a NAMED crew member on. Idempotent, and the only way anybody joins.
+ *
+ * A squad needs to seat and unseat a specific person — the third volunteer's connection
+ * drops, not "the last one who happened to be pushed". `toggleCoop` below is now a thin
+ * wrapper over these two for the local P key, rather than the other way round.
+ */
+export function seatResponder(state, id) {
+  const already = state.responders.find((r) => r.id === id);
+  if (already) return already;
+  const index = CREW.findIndex((c) => c.id === id);
+  if (index < 0 || state.responders.length >= MAX_CREW) return null;
+  const r = makeResponder(index);
+  const anchor = state.responders[0] || { x: STATION.spawn.x, y: STATION.spawn.y };
+  r.x = anchor.x + 2.6 * state.responders.length;
+  r.y = anchor.y;
   state.responders.push(r);
-  state.coop = true;
+  state.coop = state.responders.length > 1;
+  return r;
+}
+
+/** Sign one off. r1 is the shift and cannot leave it. */
+export function unseatResponder(state, id) {
+  const i = state.responders.findIndex((r) => r.id === id);
+  if (i <= 0) return false;
+  const gone = state.responders[i];
+  /* Never let somebody leave holding the only nozzle, or dragging a patient. With two
+   * people this was tidiness; with four it is the difference between a volunteer's
+   * connection dropping and a casualty becoming permanently un-carriable. */
+  for (const t of state.tools) if (t.carrier === gone.id) { t.carrier = null; t.x = gone.x; t.y = gone.y; }
+  for (const v of state.victims) if (v.draggedBy === gone.id) v.draggedBy = null;
+  for (const ap of state.apparatus) {
+    if (ap.driverId === gone.id) ap.driverId = null;
+    ap.passengerIds = ap.passengerIds.filter((q) => q !== gone.id);
+  }
+  state.responders.splice(i, 1);
+  delete state.net.remoteCommands[gone.id];
+  state.coop = state.responders.length > 1;
   return true;
+}
+
+/**
+ * The P key: a second volunteer on THIS keyboard, on and off.
+ *
+ * It only ever touches a seat a keyboard can reach, so pressing P in a four-handed game
+ * cannot sign off somebody who is playing from another continent — which is what popping
+ * the last responder off the list used to do.
+ */
+export function toggleCoop(state) {
+  const local = state.responders.find((r) => r.id !== 'r1' && !r.remote);
+  if (local) { unseatResponder(state, local.id); return false; }
+  return !!seatResponder(state, 'r2');
 }
 
 /** A siren within earshot is what finally gets an occupant to leave the building. */

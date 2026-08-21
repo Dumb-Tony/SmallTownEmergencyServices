@@ -260,8 +260,30 @@ export class Hud {
       : s.town.confidence > 0.35 ? '#e8c04a' : '#e06a5a';
     this.el.confWord.textContent = confidenceWord(s.town.confidence);
 
-    this.el.vehicle.innerHTML = s.responders.map((r) => this.statusFor(s, r)).join(
-      '<span class="crewsep"></span>');
+    /* YOUR status in full; everybody else as a name and the one thing you need to know
+     * about them.
+     *
+     * Every responder's full chip line joined end to end was fine for two and unreadable
+     * for four — four sets of "at the wheel · 2500 L · gas 20%" is a top bar that wraps
+     * off the screen, and on a phone it did so at two. What a crew actually tracks about
+     * each other is not each other's water: it is where they are and whether they are
+     * upright. So the others get one line each, and it is the same information a fireground
+     * radio would give you. */
+    const me = s.responders[0];
+    const others = s.responders.slice(1);
+    /* Both forms, and the stylesheet picks. Four glances is 390 px of top bar on a screen
+     * that is 390 px wide — measured, it wrapped onto a second row and landed on top of
+     * the coach line. A phone gets the count and the two states it could act on; a
+     * desktop gets everybody. Deciding this in CSS rather than in JS keeps it with the
+     * rest of the responsive layout, and means there is no width threshold living in two
+     * places waiting to disagree. */
+    const urgent = others.filter((r) => r.stunMs > 0 || r.draggingVictimId);
+    this.el.vehicle.innerHTML = this.statusFor(s, me) +
+      others.map((r) => `<span class="crewsep"></span><span class="glance">${this.crewGlance(s, r)}</span>`).join('') +
+      (others.length
+        ? `<span class="crewsep tight"></span><span class="crewcount">+${others.length} crew` +
+          `${urgent.length ? ` · ${urgent.length} busy` : ''}</span>`
+        : '');
   }
 
   /** One crew member's line. In co-op there are two, side by side, each in their own
@@ -271,6 +293,36 @@ export class Hud {
     const badge = s.coop
       ? `<span class="who" style="color:${r.tint}">${r.name}</span> ` : '';
     return badge + this.statusBits(s, r, ap).join(' ');
+  }
+
+  /**
+   * One other volunteer, at a glance: their name in their own colour, and the single
+   * most useful fact about them.
+   *
+   * Deliberately ONE fact. The temptation is to shorten everybody's full line, which
+   * gives four short unreadable lines instead of four long ones; the fix is to decide
+   * what a crew actually needs to know about each other. In priority order that is: are
+   * they down, are they carrying somebody, what are they driving, what are they holding,
+   * and otherwise nothing at all.
+   */
+  crewGlance(s, r) {
+    const who = `<span class="who" style="color:${r.tint}">${r.name}</span>`;
+    let what = '';
+    if (r.stunMs > 0) what = '<span class="chip bad">down</span>';
+    else if (r.draggingVictimId) what = '<span class="chip patient">carrying</span>';
+    else if (r.inVehicleId) {
+      /* "driving MED" and not "MED". The ambulance's short label and the medical kit's
+       * are BOTH `MED` — a collision that has always been in the data and only became
+       * visible here, where one volunteer driving the ambulance and another carrying the
+       * medical kit rendered as the same word. The verb is what separates them. */
+      const ap = s.apparatus.find((a) => a.id === r.inVehicleId);
+      const driving = ap && ap.driverId === r.id;
+      what = `<span class="chip">${driving ? 'driving' : 'riding'} ${ap ? ap.short : ''}</span>`;
+    } else if (r.toolId) {
+      const t = s.toolsById[r.toolId];
+      if (t) what = `<span class="chip">holding ${t.short}</span>`;
+    }
+    return `${who}${what ? ' ' + what : ''}`;
   }
 
   statusBits(s, r, ap) {

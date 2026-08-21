@@ -234,10 +234,15 @@ export function cvdReport(colour) {
  * which asserts the calibration below still holds:
  *   2.3   a just-noticeable difference between two large adjacent patches (CIE);
  *   11    the floor this audit uses for a SIGNAL: small marks, never side by side,
- *         read in a hurry. Anchored on the pair nobody has ever confused — the two crew
- *         tints #f6c445 and #5fd0f0 measure dE00 46.7 normal and 48.1 at their worst
+ *         read in a hurry. Anchored on the pair nobody has ever confused — the first two
+ *         crew tints #f6c445 and #5fd0f0 measure dE00 46.7 normal and 48.1 at their worst
  *         simulation — and on the pair that is plainly wrong: routine vs high priority
  *         (#ffe082 vs #ffa726) measures 5.5. 11 sits between them with room either side.
+ *
+ *         That anchor is a CEILING, not a norm, and the crew growing from two to four is
+ *         what made the difference matter: one pair can be 46 apart, six pairs of four
+ *         tints cannot. The four that ship measure 16.5 at their worst (§D27), and the
+ *         four that were reached for by eye measured 4.8.
  *   3:1   WCAG 1.4.11 non-text contrast. A pair whose hues collapse is still separable
  *         if one is this much lighter than the other, which is the whole reason the
  *         proposals below move lightness and not just hue.
@@ -362,6 +367,20 @@ export const TEXT_PAIRS = Object.freeze([
   { id: 'mute-off', where: 'MUTED pill', src: 'styles.css .pill.mute.off', fg: CSS_TOKENS.dim, px: 11, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
   { id: 'netchip-live', where: 'connected chip', src: 'styles.css #netchip.live', fg: '#8ff0b0', px: 13, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
   { id: 'netchip-warn', where: 'partner-left chip', src: 'styles.css #netchip.warn', fg: '#ffc9a8', px: 13, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
+
+  /* The crew name, painted in that crew member's own tint — `.who` in hud.js statusFor.
+   *
+   * This is the only place in the game where a SIGNAL colour is also TEXT, and it is
+   * therefore the floor under how dark a crew tint is allowed to be. 11px bold is below
+   * WCAG's 18.66px "large" line, so it needs the full 4.5:1 on the pill plate over the
+   * palest roof in the town, and that works out at L* 57. Every extra point of separation
+   * between four tints wants to come out of lightness, and this is the rule that says how
+   * much lightness there is to spend — which is why #a474fc and #bc7ca4 stop at L* 59 and
+   * 60 (4.81:1 and 4.87:1) instead of going darker for an easier §D27. */
+  { id: 'who-you', where: 'crew name, "YOU"', src: 'crew.js CREW', fg: '#f6c445', px: 11, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
+  { id: 'who-partner', where: 'crew name, "PARTNER"', src: 'crew.js CREW', fg: '#5fd0f0', px: 11, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
+  { id: 'who-vol3', where: 'crew name, "VOLUNTEER 3"', src: 'crew.js CREW', fg: '#a474fc', px: 11, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
+  { id: 'who-vol4', where: 'crew name, "VOLUNTEER 4"', src: 'crew.js CREW', fg: '#bc7ca4', px: 11, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
 
   // chips
   { id: 'chip-plain', where: 'chip, e.g. "at the wheel"', src: 'styles.css .chip', fg: CSS_TOKENS.paper, px: 11.5, bold: true, bg: [PLATES.pill, 'rgba(255,255,255,0.07)'], over: BRIGHT_BACKDROPS },
@@ -509,10 +528,18 @@ export const SIGNAL_GROUPS = Object.freeze([
     src: 'styles.css .chip.good', carrier: 'colour+text',
     colours: { good: '#7fd17f', warn: '#e8c04a', bad: '#f0928a' },
   },
+  /* Six pairs, not one. Two tints is the easiest colour problem there is and four is a
+   * genuinely hard one: the first two sit at L* 82 and 78, so anything joining them has
+   * to be found in the L* 57-70 band that is left, and it has to clear every other member
+   * under all three simulations at once. The set below was searched, not chosen — the
+   * PROPOSED entry has what the eye picked first and what it measured.
+   *
+   * `src` is crew.js and not game.js: the table moved to src/data/crew.js when protocol.js
+   * needed a third volunteer's colour and could not import game.js back. */
   {
-    id: 'crew-tint', where: 'which responder is you',
-    src: 'game.js CREW', carrier: 'colour-only',
-    colours: { you: '#f6c445', partner: '#5fd0f0' },
+    id: 'crew-tint', where: 'which of the four responders is which',
+    src: 'crew.js CREW', carrier: 'colour-only',
+    colours: { you: '#f6c445', partner: '#5fd0f0', vol3: '#a474fc', vol4: '#bc7ca4' },
   },
   {
     id: 'apparatus-tint', where: 'which truck is which',
@@ -632,13 +659,24 @@ export const PROPOSED = Object.freeze([
   },
   {
     id: 'crew-tint',
-    from: { you: '#f6c445', partner: '#5fd0f0' },
-    to: { you: '#f6c445', partner: '#5fd0f0' },
-    why: 'no change: measured 46.7 dE00 normal and 48.1 at its worst simulation. This is the '
-      + 'calibration anchor for SIGNAL_DELTA_E, not a problem — yellow against cyan is the '
-      + 'one axis all three deficiencies leave something of.',
-    redundancy: 'none required, though the white band already drawn across the torso '
-      + '(renderer.js:1262) could be doubled for the partner at no cost.',
+    from: { you: '#f6c445', partner: '#5fd0f0', vol3: '#b9f06a', vol4: '#ef8fd0' },
+    to: { you: '#f6c445', partner: '#5fd0f0', vol3: '#a474fc', vol4: '#bc7ca4' },
+    why: 'the crew went from two to four, and the two colours added to fill r3 and r4 were '
+      + 'picked by eye. A lime and a pink beside a gold and a cyan look like four obviously '
+      + 'different things and are not: lime #b9f06a against the player OWN gold measures 4.8 '
+      + 'dE00 for a deuteranope and 7.7 for a protanope — one colour, not two — and pink '
+      + '#ef8fd0 against that same gold measures 6.1 for a tritanope. Three of the six pairs '
+      + 'collapsed, and the one carrying "which of these is me" was among them. '
+      + 'The two originals are kept: they are the SIGNAL_DELTA_E anchor at 46.7, and moving '
+      + 'them was measured to buy only 2 dE00 on the worst pair, which is not worth unlearning '
+      + 'a colour a player already knows. r3 and r4 were then searched over the whole gamut '
+      + 'rather than reached for: 16.5 is the best any pair of colours can do behind those two, '
+      + 'and #a474fc/#bc7ca4 is where it lands (worst pair partner/vol3, deuteranopia).',
+    redundancy: 'lightness does the structural work — 82/78 over 59/60 makes this two tiers '
+      + 'of two hues rather than four hues on one tier, and lightness is the channel all three '
+      + 'deficiencies keep. The free non-colour carrier is the white band already stroked '
+      + 'across the torso (renderer.js drawResponder): one band for r1 through four for r4 '
+      + 'counts at any zoom and survives greyscale entirely.',
   },
 ]);
 
@@ -757,6 +795,9 @@ export const FONT_SIZES = Object.freeze([
   { id: 'conf-label', where: '"TOWN"', src: 'styles.css #confidence .label', px: 11, phonePx: 11 },
   { id: 'conf-word', where: 'confidence word', src: 'styles.css #confidence .word', px: 12, phonePx: 12 },
   { id: 'mute', where: 'SOUND/MUTED', src: 'styles.css .pill.mute', px: 11, phonePx: 11 },
+  /* `.who` sets its own 11px, so the phone rule that takes `#topbar .pill` down to 11 has
+   *  nothing left to shrink — the one size in this table that is already at its floor. */
+  { id: 'who', where: 'crew name in the status line', src: 'styles.css .who', px: 11, phonePx: 11 },
   { id: 'chip', where: 'status chips', src: 'styles.css .chip', px: 11.5, phonePx: 11.5 },
   { id: 'calls', where: 'call rows', src: 'styles.css #calls li', px: 12.5, phonePx: 11 },
   { id: 'calls-head', where: '"DISPATCH"', src: 'styles.css .calls-head', px: 11, phonePx: 11 },

@@ -1,7 +1,7 @@
 # Small Town Emergency Services
 
 A cooperative emergency-response sandbox in one continuous three-quarter-view town, for
-two players on one keyboard or two browsers on opposite ends of the internet. Browser, Canvas 2D, ES modules, zero dependencies,
+up to four volunteers — two on one keyboard, the rest on browsers anywhere. Canvas 2D, ES modules, zero dependencies,
 no build step.
 
 **▶ Play it: https://dumb-tony.github.io/SmallTownEmergencyServices/**
@@ -86,7 +86,10 @@ around a corner instead of steering in eighths.
 
 ![The same shift on a phone: stick, verb buttons, equipment row](docs/m6-phone.png)
 
-## Two of you
+## Up to four of you
+
+![Four volunteers on one structure fire: one on the line, one at the wheel of the ambulance,
+one carrying a casualty out, one still walking in](docs/m15-crew4.png)
 
 Press `P` and a partner signs on mid-shift. There is one wheel, one nozzle and one
 patient, and those are contested by construction rather than by a rule: first into a
@@ -100,12 +103,26 @@ opens it lands in your town. (There is still a five-character code in the top ba
 saying out loud.) There is no server: it is a direct WebRTC connection, with a public
 broker used only to introduce the two browsers.
 
+**Three of them can join over the internet**, for a crew of four — the GDD's "one to four
+players", and about as many hands as three trucks and one clinic can usefully occupy. A
+fifth is turned away and told why.
+
 The host's town is the game. A client sends what its keys are doing and draws what comes
-back, and never steps a simulation of its own — so the two of you cannot end up
-disagreeing about whether a building burned down. Snapshots go out twelve times a second
-(a busy town measures 4.7 kB, so 55 kB/s); commands go up every frame at 76 bytes. If
-your partner drops, whatever they were holding hits the ground, whoever they were
-carrying is put down, and the shift carries on one-handed.
+back, and never steps a simulation of its own — so you cannot end up disagreeing about
+whether a building burned down. One snapshot goes out twelve times a second to everybody;
+commands go up every frame at 76 bytes. A command is attributed to the connection it
+arrived on, so nobody can drive anybody else.
+
+**If somebody drops, their seat is held.** They get a token that buys back the same
+volunteer with the same kit still in their hands, because a ten-minute shift means most
+dropped links are the same person about to reconnect. If they really are gone, the seat
+expires after 45 seconds and everything they were holding goes back to the town — a body
+standing in the street with the only medical kit is the failure the holding was meant to
+avoid, not one to trade for it.
+
+Your own status is on the top bar in full. Everybody else gets their name, in their own
+colour, and the one thing you actually need to know about them: down, carrying, driving,
+or what they are holding.
 
 ## What is in the town
 
@@ -269,6 +286,7 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   geometry, persistence, loadouts, movement, live frames, determinism. Section H2 greps
   every source file for `Math.random`, which `src/core/rng.js` claimed for months without
   anything behind it — and that is exactly how the audio layer came to be built on one.
+- `tools/m15-tests.js` — a crew of four. Mostly about the four places a two-case rule was quietly wrong at three: the P key signing off somebody on another continent, three clients all driving one body, a third seat reading the first seat's keys, and a snapshot decoder that painted anybody who was not `r2` in the host's own colour. Its crew-size comparison asserts that crew size changes the shift AT ALL, because the first version of it measured one bot three times and every assertion passed.
 - `tools/m14-tests.js` — the station between shifts. What a truck's damage, position and
   tank carry over, what gets collected and when, and the line between a consequence and an
   ambush. Its six-shift soak has a CONTROL arm — same seed, same bot, carry-over wiped —
@@ -344,8 +362,8 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**1343 assertions** — m0 146 · m1 113 · m2 57 · m3 99 · m4 59 · m5 31 · m6 42 · m7 35 ·
-m8 34 · m9 94 · m10 226 · m11 105 · m12 98 · m13 78 · m14 88 · boot-check 38.
+**1481 assertions** — m0 146 · m1 113 · m2 57 · m3 102 · m4 59 · m5 31 · m6 42 · m7 35 ·
+m8 34 · m9 94 · m10 254 · m11 105 · m12 98 · m13 78 · m14 88 · m15 107 · boot-check 38.
 
 Suites emit progressively, so a hang still reports how far it got.
 

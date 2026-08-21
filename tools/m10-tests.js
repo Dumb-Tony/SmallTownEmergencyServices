@@ -14,7 +14,7 @@
 import {
   parseColour, toHex, composite, flatten, srgbToLinear, relativeLuminance, contrastRatio,
   isLargeText, requiredRatio, toLab, deltaE00, deltaE, simulateCvd, cvdReport, CVD_KINDS,
-  distinguishable, SIGNAL_DELTA_E, JND_DELTA_E, LUM_ESCAPE_RATIO,
+  distinguishable, SIGNAL_DELTA_E, JND_DELTA_E, LUM_ESCAPE_RATIO, LUM_PARTIAL_RATIO,
   parseSrc, CSS_VAR_NAMES, CSS_TOKENS, PLATES, CANVAS_BACKDROPS,
   TEXT_PAIRS, auditText, textFailures, SIGNAL_GROUPS, signalPairs, auditSignals,
   signalFailures, signalWarnings, PROPOSED, prefersReducedMotion, motionScalars,
@@ -206,7 +206,10 @@ lines.push('--- D. the signal pairs ---');
   ok('D6 the patient rings are checked', !!find('condition-ring', 'stable', 'critical'));
   ok('D7 the confidence bar is checked', !!find('confidence-bar', 'high', 'mid'));
   ok('D7b and the chips separately from it', !!find('chip-status', 'good', 'warn'));
-  ok('D8 the two crew tints are checked', !!find('crew-tint', 'you', 'partner'));
+  ok('D8 the crew tints are checked', !!find('crew-tint', 'you', 'partner'));
+  ok('D8b all four of them, which is six pairs and not one',
+    ['you/partner', 'you/vol3', 'you/vol4', 'partner/vol3', 'partner/vol4', 'vol3/vol4']
+      .every((p) => !!find('crew-tint', p.split('/')[0], p.split('/')[1])));
   ok('D9 the three trucks are checked', !!find('apparatus-tint', 'engine', 'rescue'));
 
   lines.push('      group                pair                     dE00  prot  deut  trit  lum   verdict');
@@ -330,6 +333,120 @@ lines.push('--- D. the signal pairs ---');
     SIGNAL_GROUPS.find((g) => g.id === 'chip-status').carrier.includes('text'));
   lines.push(`      --bad #e06a5a -> ${chip.bad}: chip label 2.90:1 -> 5.17:1, ` +
     `good/bad dE00 ${f(oldBad, 1)} -> ${f(newBad, 1)} (text carries it)`);
+
+  /* ── the crew, the one signal with nothing but colour under it ──────────────────
+   *
+   * Two tints is one pair, and one pair is the easiest colour problem there is — it is
+   * the pair SIGNAL_DELTA_E was calibrated on, at 46.7. Four tints is SIX pairs, and six
+   * is where a palette stops being a matter of taste: every colour has to clear every
+   * other one under three simulations at once, and there is only so much gamut.
+   *
+   * The set reached for first is the exact shape of failure this suite exists to catch. A
+   * lime and a pink beside the gold and the cyan look like four obviously different
+   * things. Three of their six pairs collapse. */
+  const crewNow = SIGNAL_GROUPS.find((g) => g.id === 'crew-tint').colours;
+  const crewWas = PROPOSED.find((p) => p.id === 'crew-tint').from;
+  const crewRows = rows.filter((r) => r.group === 'crew-tint');
+  eq('D27 four crew members is six pairs, and all six are audited', crewRows.length, 6);
+  ok('D27b every one of the six clears the threshold under all three simulations',
+    crewRows.every((r) => r.ok && r.worst >= SIGNAL_DELTA_E),
+    crewRows.filter((r) => r.worst < SIGNAL_DELTA_E)
+      .map((r) => `${r.aName}/${r.bName} ${f(r.worst, 1)}`).join(','));
+  ok('D27c and in normal vision as well, which `worst` does not cover',
+    crewRows.every((r) => r.normal >= SIGNAL_DELTA_E));
+  ok('D27d none of them is leaning on lightness to escape a hue that collapsed',
+    crewRows.every((r) => r.verdict === 'ok'), crewRows.map((r) => r.verdict).join(','));
+
+  /* What the eye picked, measured. These are not hypotheticals: they are the hexes that
+     were in src/data/crew.js when this was written, and the reason the search happened. */
+  const wasPair = (a, b) => distinguishable(crewWas[a], crewWas[b]);
+  const wasLime = wasPair('you', 'vol3'), wasPink = wasPair('you', 'vol4');
+  lt('D27e the lime picked by eye IS the player own gold to a deuteranope',
+    wasLime.worst, SIGNAL_DELTA_E);
+  eq('D27f and the deficiency it dies on is deuteranopia, not the tritanopia the ambers died on',
+    wasLime.worstKind, 'deuteranopia');
+  lt('D27g with no lightness underneath it to escape by', wasLime.ratio, LUM_ESCAPE_RATIO);
+  lt('D27h the pink collapses against that same gold too', wasPink.worst, SIGNAL_DELTA_E);
+  eq('D27i — that one for a tritanope, so no single simulation would have found both',
+    wasPink.worstKind, 'tritanopia');
+  const wasNames = Object.keys(crewWas);
+  const wasBroken = [];
+  for (let i = 0; i < wasNames.length; i++) {
+    for (let j = i + 1; j < wasNames.length; j++) {
+      if (!wasPair(wasNames[i], wasNames[j]).ok) wasBroken.push(`${wasNames[i]}/${wasNames[j]}`);
+    }
+  }
+  eq('D27j three of its six pairs collapsed, including the one that says which is me',
+    wasBroken.join(','), 'you/vol3,you/vol4,partner/vol4');
+
+  /* WHY the replacement works, stated as structure rather than as luck: two tiers of two.
+     The pairs WITHIN a tier — you/partner at L* 82 and 78, vol3/vol4 at 59 and 60 — have
+     no lightness to fall back on and are carried entirely by hue, which is affordable
+     twice. The four pairs ACROSS the tiers have 18 to 23 points of L* under them, and
+     lightness is the one channel all three deficiencies keep. Four hues on one tier would
+     be six of the first kind and no second chances anywhere. */
+  const Ls = Object.values(crewNow).map((c) => toLab(c).L);
+  gt('D27k the four are spread over lightness and not only hue', Math.max(...Ls) - Math.min(...Ls), 20);
+  const withinTier = [find('crew-tint', 'you', 'partner'), find('crew-tint', 'vol3', 'vol4')];
+  ok('D27l the two within-tier pairs are carried by hue alone',
+    withinTier.every((r) => r.ratio < LUM_PARTIAL_RATIO));
+  ok('D27m and every across-tier pair has lightness under it as well',
+    crewRows.filter((r) => !withinTier.includes(r)).every((r) => r.ratio >= LUM_PARTIAL_RATIO));
+
+  /* The constraint that shaped the palette, asserted where it can be seen rather than
+     left in a comment. hud.js statusFor paints each crew member's NAME in that crew
+     member's tint, 11px bold — below WCAG's 18.66px "large" line, so it needs the full
+     4.5:1 on the pill plate over the palest roof in town. That is L* 57, and it is the
+     reason vol3 and vol4 stop at 59 and 60 instead of going darker to buy separation.
+     A signal colour that is also text cannot be chosen on separation alone. */
+  const whoRows = auditText().filter((r) => r.id.indexOf('who-') === 0);
+  eq('D27n each of the four is audited as text as well as a mark', whoRows.length, 4);
+  ok('D27o and every one clears AA at 11px bold over the palest roof in the town',
+    whoRows.every((r) => r.pass && r.need === 4.5),
+    whoRows.filter((r) => !r.pass).map((r) => `${r.id} ${f(r.ratio)}`).join(','));
+  gt('D27p the darkest of them clears it on merit, not on a rounding',
+    Math.min(...whoRows.map((r) => r.ratio)), 4.6);
+
+  /* CROSS-GROUP. This suite asserts within a group and not between groups, and that is a
+     decision rather than an oversight: with twenty-five signal colours in one town, some
+     pair of them collapses under some deficiency no matter what is done — the player's own
+     #f6c445 is 3.5 dE00 from a live gas meter for a protanope and was before the crew was
+     four. What CAN honestly be asked of a crew tint is that it not read as a truck or a
+     casualty in normal vision, where the player is doing the telling apart and where the
+     shapes differ anyway. So: reported, with one assertion, and that assertion is relative
+     — no colour added here may sit closer to its neighbourhood than the gold already does. */
+  const NEIGHBOUR_GROUPS = ['apparatus-tint', 'condition-ring', 'condition-bar',
+    'priority-marker', 'priority-list', 'hydrant', 'gas-meter', 'siren-bar'];
+  const nearestNeighbour = (hex) => {
+    let best = { id: '', hex: '', d: Infinity };
+    for (const g of SIGNAL_GROUPS) {
+      if (NEIGHBOUR_GROUPS.indexOf(g.id) < 0) continue;
+      for (const [k, v] of Object.entries(g.colours)) {
+        const d = deltaE(hex, v);
+        if (d < best.d) best = { id: `${g.id}.${k}`, hex: v, d };
+      }
+    }
+    return best;
+  };
+  const goldGap = nearestNeighbour(crewNow.you).d;
+  gt('D27q neither new tint sits closer to a truck or a casualty than the gold already does',
+    Math.min(nearestNeighbour(crewNow.vol3).d, nearestNeighbour(crewNow.vol4).d), goldGap);
+
+  let wasWorst = Infinity;
+  for (let i = 0; i < wasNames.length; i++) {
+    for (let j = i + 1; j < wasNames.length; j++) {
+      wasWorst = Math.min(wasWorst, wasPair(wasNames[i], wasNames[j]).worst);
+    }
+  }
+  lines.push(`      crew ${Object.values(crewWas).join(' ')} -> ${Object.values(crewNow).join(' ')}` +
+    `: worst of the six ${f(wasWorst, 1)} -> ${f(Math.min(...crewRows.map((r) => r.worst)), 1)} dE00`);
+  lines.push('      crew tint  L*   as text   nearest thing it stands next to (normal vision)');
+  for (const [k, v] of Object.entries(crewNow)) {
+    const n = nearestNeighbour(v);
+    const w = whoRows.find((r) => r.id === `who-${k}`);
+    lines.push(`      ${pad(k, 8)} ${v} ${lpad(f(toLab(v).L, 0), 3)}  ${lpad(f(w.ratio), 5)}:1   ` +
+      `${pad(n.id, 26)} ${n.hex} ${f(n.d, 1)}`);
+  }
 }
 
 /* ── E. every text/background pair the HUD renders ───────────────────────── */
@@ -387,6 +504,16 @@ lines.push('--- E. text contrast ---');
     ok(`E14.${id} clears AA now`, r && r.pass, r ? `${f(r.ratio)}:1 needs ${f(r.need, 1)}` : 'no such pair');
   }
 
+  /* The crew names are the only text in the game painted in a SIGNAL colour, which makes
+     them the one place where the two halves of this audit constrain each other: §D27 wants
+     the four tints spread as far apart as the gamut allows, and this wants every one of
+     them light enough to read at 11px. The second wins, and §D27 says by how much. */
+  const who = rows.filter((r) => r.id.indexOf('who-') === 0);
+  ok('E16 every crew name clears AA painted in its own tint', who.every((r) => r.pass),
+    who.filter((r) => !r.pass).map((r) => `${r.id} ${f(r.ratio)}`).join(','));
+  lines.push(`      crew names on the pill over ${who[0] ? who[0].backdrop : '?'}: ` +
+    `${who.map((r) => `${r.id.slice(4)} ${f(r.ratio)}:1`).join(', ')} (need 4.5)`);
+
   const failures = textFailures();
   ok('E15 no failure is a false positive on an opaque card',
     !failures.some((r) => r.id === 'card-body' || r.id === 'card-keys'));
@@ -404,7 +531,7 @@ lines.push('--- F. the replacement palettes, and that they are what shipped ---'
   /* Every group this audit found failing has a proposal, and the proposal is what is now
      in the game — F9 below. The failure list is empty precisely BECAUSE of that, so it
      can no longer be used to look them up; the three ids are named instead. */
-  for (const g of ['priority-marker', 'priority-list', 'condition-ring']) {
+  for (const g of ['priority-marker', 'priority-list', 'condition-ring', 'crew-tint']) {
     ok(`F2.${g} has a proposal`, PROPOSED.some((p) => p.id === g));
   }
 
@@ -441,7 +568,7 @@ lines.push('--- F. the replacement palettes, and that they are what shipped ---'
      and both clear the threshold, so neither gets a proposal. */
   const changed = PROPOSED.filter((p) => Object.keys(p.to).some((k) => p.to[k] !== p.from[k]));
   ok('F6b every recolour answers a failure this audit measured',
-    changed.every((p) => ['priority-marker', 'priority-list', 'condition-ring'].includes(p.id)),
+    changed.every((p) => ['priority-marker', 'priority-list', 'condition-ring', 'crew-tint'].includes(p.id)),
     changed.map((p) => p.id).join(','));
   ok('F6c and a group that measures fine is left alone',
     !PROPOSED.some((p) => p.id === 'hydrant' || p.id === 'gas-meter'));
@@ -455,6 +582,38 @@ lines.push('--- F. the replacement palettes, and that they are what shipped ---'
     ok(`F9.${p.id} the palette in the game is the palette that was proven`, same,
       Object.keys(p.to).map((k) => `${k} ${live[k]} vs ${p.to[k]}`).join(', '));
   }
+
+  /* THE LOCK ON THE CREW, which goes one step further than F9.
+   *
+   * F9 asserts that a11y.js's own table matches a11y.js's own proposal: it catches the
+   * audit disagreeing with itself. That is not enough for a palette that has been proven
+   * but not yet pasted in, because both halves of the audit can agree perfectly while the
+   * game paints something else entirely. This reads src/data/crew.js over http and pulls
+   * the four `tint:` hexes straight out of the CREW literal — so it catches the GAME
+   * disagreeing with the audit: a wrong hex, the right hexes in the wrong order (which
+   * paints the player as a volunteer), or a fifth crew member nobody measured.
+   *
+   * It is RED until the proven palette is in the file, and the failure message is the
+   * paste. That is deliberate: a proven palette sitting in a11y.js while the game ships
+   * a set with three collapsing pairs is precisely the lie this suite exists to prevent,
+   * and it should be impossible to leave it that way and still see a green run. */
+  const crewProven = Object.values(PROPOSED.find((p) => p.id === 'crew-tint').to);
+  const crewShipped = crewTintsInSource();
+  /* The detail is the edit, not a diagnosis: only the seats that differ, named by the id
+     the game uses for them, short enough to survive on one line of a console that is being
+     grepped for FAIL. A failure nobody can act on from the failure line is half a test. */
+  const crewDiff = crewShipped == null ? ['no CREW literal in src/data/crew.js']
+    : crewProven.map((h, i) => (crewShipped[i] === h ? null : `r${i + 1} ${crewShipped[i] || '(missing)'} -> ${h}`))
+      .filter((s) => s !== null);
+  if (crewShipped && crewShipped.length !== crewProven.length) {
+    crewDiff.push(`crew.js declares ${crewShipped.length} tints, ${crewProven.length} were measured`);
+  }
+  ok('F10 the four tints in crew.js are the four that were proven',
+    crewDiff.length === 0, crewDiff.join(', '));
+  ok('F10b and game.js still re-exports CREW, so every existing caller keeps working',
+    /export\s*\{[^}]*\bCREW\b[^}]*\}\s*from\s*'\.\/data\/crew\.js'/.test(readSource('game.js')));
+  lines.push(`      crew.js tints:  ${(crewShipped || ['(none)']).join(' ')}`);
+  lines.push(`      proven palette: ${crewProven.join(' ')}`);
 
   // the point of the exercise: lightness, not hue, is what carries through
   const pri = PROPOSED.find((p) => p.id === 'priority-marker');
@@ -554,6 +713,10 @@ const SOURCES = {
   'renderer.js': 'src/render/renderer.js',
   'hud.js': 'src/ui/hud.js',
   'game.js': 'src/game.js',
+  // The crew table left game.js for its own data module the moment protocol.js needed a
+  // third volunteer's colour; game.js re-exports it, so every `src` that said game.js CREW
+  // had stopped naming the file the hexes are actually in. H22 pins the move itself.
+  'crew.js': 'src/data/crew.js',
   'equipment.js': 'src/data/equipment.js',
 };
 const _cache = {};
@@ -566,6 +729,20 @@ function readSource(name) {
   x.send(null);
   _cache[name] = x.status === 200 || x.status === 0 ? x.responseText : '';
   return _cache[name];
+}
+
+/**
+ * The four `tint:` hexes inside the CREW literal in src/data/crew.js, in crew order.
+ *
+ * Order and count are read, not just membership: "the four hexes are all somewhere in the
+ * file" would go green on a palette pasted in the wrong order, which paints the player as
+ * a volunteer, and on a fifth crew member whose colour nobody measured.
+ */
+function crewTintsInSource() {
+  const m = readSource('crew.js').match(/export const CREW = Object\.freeze\(\[([\s\S]*?)\]\)/);
+  if (!m) return null;
+  return (m[1].match(/tint:\s*'#[0-9a-fA-F]{6}'/g) || [])
+    .map((s) => s.slice(s.indexOf('#'), s.indexOf('#') + 7).toLowerCase());
 }
 
 function sectionH() {
@@ -624,6 +801,17 @@ lines.push('--- H. every colour in the audit came out of the game ---');
   missing = [];
   let anchored = 0;
   for (const g of SIGNAL_GROUPS) {
+    /* crew-tint is checked by F10 instead, and checked harder. F10 reads the four `tint:`
+       hexes out of the CREW literal in src/data/crew.js IN ORDER, so it also catches the
+       right hexes pasted in the wrong order — which paints the player as a volunteer — and
+       a fifth crew member nobody measured; "the hex turns up somewhere near the anchor"
+       sees neither. Nothing is lost by not doing it twice: F9 pins SIGNAL_GROUPS to
+       PROPOSED.to and F10 pins crew.js to the same, so the two ends still meet.
+       It is also the one group whose table is allowed to disagree with the game for a
+       while — it holds a proven replacement palette, and F10 is the line that stays red
+       until that palette is applied. Reporting that here as well would turn one fact into
+       two failures that read like two problems. */
+    if (g.id === 'crew-tint') { anchored++; continue; }
     const { file, anchor } = parseSrc(g.src);
     const text = file && SOURCES[file] ? readSource(file) : '';
     const isJs = !!file && file.endsWith('.js');
@@ -641,14 +829,24 @@ lines.push('--- H. every colour in the audit came out of the game ---');
     && parseSrc('renderer.js drawVictim').anchor === 'drawVictim'
     && parseSrc('styles.css .chip.good').file === 'styles.css');
 
-  // and the text pairs, whose fg colours are quoted from styles.css or renderer.js
+  /* And the text pairs, whose fg colours are quoted from styles.css or renderer.js.
+     A colour that is ALSO a signal colour is skipped: the check above is the more specific
+     claim about it, and running both turns one drifted hex into two failures that look
+     like two problems. The crew names are what made this worth saying — they are painted
+     in the crew member's own tint, so each of them is a signal colour first and text
+     second, and §D27 is where the two constraints on it are reconciled. */
+  const signalHexes = {};
+  for (const g of SIGNAL_GROUPS) for (const v of Object.values(g.colours)) signalHexes[v] = g.id;
   missing = [];
+  let alsoSignal = 0;
   for (const p of TEXT_PAIRS) {
+    if (signalHexes[p.fg]) { alsoSignal++; continue; }
     const { file } = parseSrc(p.src);
     const text = file && SOURCES[file] ? readSource(file) : '';
     if (!text.includes(p.fg) && !css.includes(p.fg)) missing.push(`${p.id}=${p.fg} (${p.src})`);
   }
   eq('H7 every text colour is in the game as well', missing.join(','), '');
+  gt('H7b and the ones that are signal colours too were checked as signals', alsoSignal, 3);
 
   /* The animation rates are read off real expressions.
    *
@@ -701,6 +899,20 @@ lines.push('--- H. every colour in the audit came out of the game ---');
     /strokeStyle = 'rgba\(0,0,0,0\.62\)';\s*ctx\.strokeText/.test(rnd));
   ok('H19 the game honours prefers-reduced-motion, in CSS and on the canvas',
     css.includes('prefers-reduced-motion') && rnd.includes('motionScalars'));
+
+  /* The crew table moved out of game.js while this audit was being written, and every
+     `src` that said "game.js CREW" quietly stopped naming the file the hexes are in —
+     H6 kept passing on a stale pointer only because game.js re-exports the name, not the
+     literals. Pin the move: where the table lives, and the property that made it a
+     separate module at all. crew.js importing anything is the import cycle coming back. */
+  const crewSrc = readSource('crew.js');
+  gt('H22 src/data/crew.js was readable', crewSrc.length, 200);
+  ok('H22b it holds the CREW literal itself, not a re-export',
+    /export const CREW = Object\.freeze\(\[/.test(crewSrc));
+  ok('H22c and imports nothing, which is the whole reason it is its own module',
+    !/^\s*import\s/m.test(crewSrc));
+  ok('H22d the crew-tint group points at that file and not at game.js',
+    parseSrc(SIGNAL_GROUPS.find((g) => g.id === 'crew-tint').src).file === 'crew.js');
 }
 
 /* ── I. text size ───────────────────────────────────────────────────────── */

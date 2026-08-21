@@ -289,7 +289,12 @@ they are handed over.
 Beyond the MVP scope, and in each case because a prior gate exposed the gap:
 
 - **local co-op and host-authoritative WebRTC netcode** (Phase 5), joined by a link rather
-  than a typed code;
+  than a typed code — and now a crew of **up to four**, which is the "one to four players"
+  this document opens with. Two share a keyboard because there is one keyboard; the other
+  two arrive over the wire, each with a seat that is held (and a token that reclaims it)
+  if their connection drops. Measured, four hands do not currently close more calls than
+  two: the bottleneck is three trucks and one dispatch queue, which is precisely what
+  "larger station and more bays" below is for;
 - **a synthesised audio layer** whose mix is a pure function of state;
 - **residents** — the GDD's `NPCs` core system. Every building has people in it who get
   themselves out of a burning one faster than the crew can cross town, so what the player
@@ -300,7 +305,7 @@ Beyond the MVP scope, and in each case because a prior gate exposed the gap:
 
 Its symbolic proximity interactions remain explicitly prototype shortcuts.
 
-Everything above is held down by a headless-browser suite — 1343 assertions across
-sixteen files — including a crew bot that plays whole shifts through the real input path,
+Everything above is held down by a headless-browser suite — 1481 assertions across
+seventeen files — including a crew bot that plays whole shifts through the real input path,
 a computed colour/contrast/colour-vision audit, and a robustness suite that soaks six
 shifts without a reload. See `README.md` for what each suite is for.

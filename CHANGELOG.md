@@ -1,5 +1,84 @@
 # Changelog
 
+## 2026-08-20 — a crew of four
+
+The GDD's player fantasy opens *"One to four players begin each shift at a small volunteer
+station."* The netcode was a fixed pair: one `link`, one `remoteResponderId`, and a partner
+created by *"if there are fewer than two responders, add one"*. Four seats is not that with
+a bigger number in it.
+
+The session now keeps a **seat map** — one link per volunteer, a resume token each, and one
+snapshot broadcast to all of them. Shape copied from `ContainmentDetailWeb\src\net\net.js`
+(`Dev\INDEX.md` → Multiplayer), which is the only squad-of-N in the tree.
+
+**Four places where a two-case rule was quietly wrong at three**, each of which would have
+shipped looking finished:
+
+- **`toggleCoop` popped the LAST responder.** The P key on the host's own keyboard would
+  have signed off whichever volunteer joined most recently — somebody on another continent.
+  Seating is now by name, and P only ever touches a seat a keyboard can reach.
+- **A command was attributed to `remoteResponderId`**, a single field. Three clients would
+  all have driven the same body. A command is now attributed to **the link it arrived on**,
+  so a message naming somebody else drives the sender and not the person it names.
+- **`readCommand` falsy-tests its prefix**, so a third seat with an empty prefix reads r1's
+  own keys — two crew on one set of WASD, which is the per-seat-input-collapsing bug this
+  tree has already shipped once elsewhere. r3 and r4 have a **null** prefix and the reader
+  returns an empty command for it.
+- **The snapshot decoder branched on `'r2'`**, so anybody who was not r2 arrived in the
+  host's own colour, called "You". Two people in the same coat, one of them yours.
+
+**A drop is not a departure — and neither is it for ever.** The pair version signed a
+partner off the instant their link closed, which drops whatever they were holding on the
+floor for a three-second reconnect. The seat is now held, with a token that buys back the
+same body and the same kit. But held *for ever* is the older bug that behaviour replaced: a
+volunteer standing in the street with the only medical kit for the rest of the shift. So
+the seat expires after `CONFIG.net.reconnectGraceMs`, and expiring does exactly what
+signing off does. Both halves are asserted.
+
+The top bar had to change shape too. Four full status lines is a bar that wraps off the
+screen — and the fix is not to shorten all four, it is to decide **what a crew actually
+needs to know about each other**: not each other's water, but where they are and whether
+they are upright. You get your own status in full; everybody else gets a name in their own
+colour and one fact. That immediately exposed a collision that had always been in the data
+— `Medic 1` and `Medical kit` both abbreviate to **MED**, so one volunteer driving the
+ambulance and another carrying the kit rendered identically. The verb separates them.
+
+**Two more colours turned out to be the hardest part.** Two crew tints is one pair to keep
+apart; four is six, under normal vision and three colour-vision simulations. The two
+obvious extra colours — a lime and a hot pink — were applied, looked completely
+unmistakable, and **measured 4.8 against a threshold of 11**: `#b9f06a` *is* the player's
+own gold to a deuteranope, and `#ef8fd0` is that same gold to a tritanope. Three of six
+pairs collapsed, including the one carrying *which of these is me*, and no single
+simulation catches both. Searched rather than picked, the palette is now a violet and a
+muted rose, worst pair **16.5**.
+
+There is no lightness ladder in it, for a reason worth writing down: a crew tint is also
+TEXT — the HUD paints each name in it at 11px bold, which needs 4.5:1 on the pill plate,
+which floors L\* at 57. The best candidate found measured exactly 4.50:1, one rounding from
+failing AA. So it is two tiers of two, hue apart within a tier and 18–23 L\* across.
+
+**And does four of them actually help? Measured: no — and that is worth saying plainly.**
+Bot shifts on two seeds, one crew against two against four: one closes 2 calls and leaves
+the town at 28% confidence, two close 4 at 49%, and **four also close 4 at 49%**. All four
+volunteers are genuinely working — they walk 2941, 3100, 3100 and 3024 metres — so the
+third and fourth pair of hands are on their feet the whole shift and there is simply no
+more work for them to close. The bottleneck is three trucks and one dispatch queue, not
+hands. That matches where the GDD files "larger station and more bays": under long-term
+progression, as the thing a bigger crew would need.
+
+Both halves of that took an assertion the first version could not make. The first harness
+reported **1, 2 and 4 crew as identical to the digit** and every comparison passed happily,
+because they were all "not worse than" — two silent wiring mistakes meant it had measured
+one bot three times. So the suite now asserts, first, that the crew size changes the shift
+*at all*, and second, that every seat actually moved. A crew-size comparison in which the
+sizes come out equal is not a result.
+
+`tools/m15-tests.js` — 107 assertions, and `src/data/crew.js` is a new data module holding
+the crew table: the moment the wire format needed to know what colour a third volunteer
+wears, `protocol.js` had to import `game.js`, which already imports `protocol.js`. A `const`
+in a cycle is not a hoisted function.
+
+
 ## 2026-08-20 — the station remembers
 
 The last two entries on the GDD's persistence list — "vehicle damage and location" and
