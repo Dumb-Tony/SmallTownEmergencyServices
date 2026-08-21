@@ -19,6 +19,7 @@
 import { BUILDINGS, BUILDING_BY_ID } from '../data/town.js';
 import { buildFireCells } from '../sim/hazards.js';
 import { RESIDENT_STATES } from '../sim/residents.js';
+import { CONDITION_IDS } from '../sim/weather.js';
 
 /** Buildings by position in the authored table. The town is data, both ends load the same
  *  data, and a version check already refuses a peer that does not — so a building costs
@@ -33,7 +34,7 @@ export const MSG = Object.freeze({
   BYE: 'bye',
 });
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /* ── numbers ──────────────────────────────────────────────────────────────
  * Everything positional is quantised to centimetres and sent as an integer. A town
@@ -111,6 +112,15 @@ export function encodeSnapshot(state) {
       d: v.delivered ? 1 : 0, l: v.lost ? 1 : 0, nt: v.needsTransport ? 1 : 0,
       ic: v.incidentId || 0,
     })),
+    /* Three numbers for the whole weather. The client does not simulate, so it needs none
+       of the multipliers — but it DRAWS, and the renderer reads the condition for its sky
+       grade and the wind for which way the smoke leans. A client watching a rainstorm
+       under a clear sky, with the smoke going the wrong way while the host's fire jumps
+       downwind, is watching a different game. */
+    we: state.weather
+      ? [CONDITION_IDS.indexOf(state.weather.id), q3(state.weather.windDir), q3(state.weather.strength)]
+      : null,
+
     /* Residents travel, because a client that cannot see the crowd cannot see why their
        partner is walking slowly, and a client watching a house fire with nobody coming
        out of it is watching a different game.
@@ -195,6 +205,14 @@ export function applySnapshot(state, snap) {
     v.inApparatusId = d.ia || null; v.delivered = !!d.d; v.lost = !!d.l;
     v.needsTransport = !!d.nt; v.incidentId = d.ic || null;
   });
+
+  if (snap.we) {
+    state.weather = {
+      id: CONDITION_IDS[snap.we[0]] || 'clear',
+      windDir: u3(snap.we[1]),
+      strength: u3(snap.we[2]),
+    };
+  }
 
   /* A shell, not a resident: the client never steps one, so it has no use for the fields
      that only matter to a decision. Everything drawResident touches is here. */

@@ -166,6 +166,16 @@ export const CONFIG = {
     declineLiveMul: 1.7,
   },
 
+  /* ── weather (src/sim/weather.js) ──────────────────────────────────────── */
+  weather: {
+    /* A shift's condition is drawn once, from its own stream, and every modifier is a
+       bounded multiplier on a number a system already read. `clear` is exactly 1.0 on all
+       of them — the game as it was before this existed — so a change here can only ever
+       be a change to the OTHER conditions. */
+    repeatWeightMul: 0.35,  // yesterday's weather is less likely, not banned
+    minStrength: 0.45,      // below this a condition is indistinguishable from clear
+  },
+
   /* ── residents (src/sim/residents.js) ──────────────────────────────────── */
   residents: {
     radiusM: 0.34,

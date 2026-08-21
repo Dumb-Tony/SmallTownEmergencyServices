@@ -58,6 +58,12 @@ html, body {
 #vehicle { margin-left: auto; }
 .pill.mute { font-size: 11px; letter-spacing: 1.6px; color: var(--lime); min-width: 62px; justify-content: center; }
 .pill.mute.off { color: var(--dim); text-decoration: line-through; }
+/* The weather pill. hud.js has toggled `warn` on it for every night that is not clear
+   since the system landed, and nothing in here answered — so "Hard wind" and "Clear" were
+   the same pill and the one night it matters looked like every other. Amber on the pill
+   plate over the palest roof in town measures 9.03:1, which is AAA at this size; the same
+   token on .chip.warn sits on a lighter stack and already passes the audit. */
+.pill.warn { color: var(--warn); border-color: rgba(232,192,74,0.45); }
 
 .chip {
   background: rgba(255,255,255,0.07); border-radius: 5px;

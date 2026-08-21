@@ -31,6 +31,7 @@ import {
 } from '../data/town.js';
 import { TOOL_DEFS } from '../data/equipment.js';
 import { victimState } from '../sim/victims.js';
+import { weatherFor, CONDITIONS } from '../sim/weather.js';
 import { motionScalars, pulse01, blinkOn, dampen } from '../ui/a11y.js';
 
 const PALETTE = {
@@ -92,6 +93,22 @@ function wobble(i, t, speed = 6) {
   return Math.sin(i * 12.9898 + t * speed) * 0.5 + Math.sin(i * 78.233 + t * speed * 1.7) * 0.5;
 }
 
+/* How far downwind a column has blown by the top of its rise, in metres, at smokeLean
+ * 1.0. Fifteen metres against smoke's thirteen-metre rise is about 49 degrees off
+ * vertical, and 15 m is a tenth of the 165 m the camera shows while driving — far enough
+ * that the bearing is unmistakable from two streets away, short enough that the column
+ * still visibly belongs to the roof it is coming off. */
+const WIND_LEAN_M = 15;
+
+/* One streak per this many square CSS pixels of the band the rain falls through, and
+ * never more than the cap. The band is wider than the window when the wind is across the
+ * frame, so a hard rain is 103 streaks at 1600x900 in still air and 122 with the wind
+ * full across it; a 390x844 phone gets 24 and 41. The cap is set above both so that it
+ * only ever catches a window nobody has tried yet, rather than silently thinning the
+ * rain on an ordinary desktop. */
+const RAIN_PX_PER_STREAK = 14000;
+const RAIN_MAX = 160;
+
 /**
  * Shade a colour by a factor: <1 darkens, >1 lightens. Faces need this constantly.
  *
@@ -149,6 +166,7 @@ export class Renderer {
        flash was the only animation in the game above the WCAG 2.3.1 three-per-second
        threshold, at 4.46 Hz, because Math.abs() doubles a sine's flash rate. */
     this.motion = motionScalars(typeof window !== 'undefined' ? window : null);
+    this.wind = this.weatherView(null);
   }
 
   render(state, nowMs = 0) {
@@ -158,6 +176,9 @@ export class Renderer {
     this.labels.length = 0;
     this.markers.length = 0;
     this.props.length = 0;
+    // Read once. It is asked for per puff, per ember and per rain streak, and it changes
+    // once a shift.
+    this.wind = this.weatherView(state);
 
     cam.resetTransform(ctx);
     this.drawSky(ctx);
@@ -168,6 +189,9 @@ export class Renderer {
     this.drawGround(ctx);
     this.drawRoads(ctx, state);
     this.drawGroundHazards(ctx, state);
+    // The condition, over the ground and under everything that stands on it. See
+    // drawWeatherGrade for why it goes here and not over the finished frame.
+    this.drawWeatherGrade(ctx);
     // Firelight lands on the GROUND, under everything that stands on it — that is the
     // difference between a fire that is drawn on the map and a fire that is lighting it.
     this.drawFireLight(ctx, state, t);
@@ -187,9 +211,40 @@ export class Renderer {
     if (this.showBounds) this.drawBounds(ctx, state);
 
     cam.resetTransform(ctx);
+    // Rain falls in FRONT of the town and behind the writing on it: over the smoke, so a
+    // column is seen through it, under the labels, which nothing is allowed to obscure.
+    this.drawRain(ctx, t);
     this.drawVignette(ctx);
     this.drawLabels(ctx);
     this.drawIncidentMarkers(ctx, state, t);
+  }
+
+  /**
+   * Tonight's weather, in the terms this file draws in.
+   *
+   * `windDir` and `strength` are not in the resolved multipliers and should not be:
+   * weatherFor hands back what the SIMULATION reads, and a bearing is not a multiplier.
+   * They come off state.weather directly, defended the same way weatherMods defends them,
+   * because one field that is sometimes absent is how a renderer ends up drawing NaN.
+   *
+   * The tint is scaled by strength here rather than in the table, matching how weather.js
+   * scales windBias and smokeLean: a multiplier is scaled toward 1 and an amount toward
+   * 0, so a light rain looks like a light rain rather than a different condition.
+   */
+  weatherView(state) {
+    const w = (state && state.weather) || null;
+    const mods = weatherFor(state);
+    const c = CONDITIONS[mods.id] || CONDITIONS.clear;
+    const s = w && Number.isFinite(w.strength) ? Math.max(0, Math.min(1, w.strength)) : 0;
+    const dir = w && Number.isFinite(w.windDir) ? w.windDir : 0;
+    return {
+      id: mods.id,
+      strength: s,
+      lean: mods.smokeLean,
+      dx: Math.cos(dir), dy: Math.sin(dir),   // the direction the wind is GOING
+      sky: c.sky,
+      tint: c.tint * s,
+    };
   }
 
   /** Depth key: the southern edge of a thing is where it meets the ground nearest you. */
@@ -259,6 +314,47 @@ export class Renderer {
     g.addColorStop(1, '#6d924f');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, cam.cssW, cam.cssH);
+  }
+
+  /**
+   * The condition as a grade over the ground and the sky — and over nothing else.
+   *
+   * WHERE IT GOES IS THE WHOLE DESIGN. tools/m10-tests.js section E measures every canvas
+   * label against the worst surface the town paints behind it, and the worst two are the
+   * clinic and civic roofs (#dfe8ee, #e6e2d6) — the palest things on screen. Grading
+   * those would move a backdrop that a table in src/ui/a11y.js has measured and that this
+   * file may not edit. Laid down after the ground and BEFORE the props, it touches
+   * nothing the audit reads: rain's 0.16 of #101828 takes the grass from #688f4e to
+   * #5a7c48, which is darker, and every label over the town is pale text on a black halo,
+   * so the grade can only ever help it.
+   *
+   * It also goes down before drawFireLight, which composites with 'lighter'. Graded after,
+   * a fire in the rain loses its glow to a flat sheet of blue; graded before, the light
+   * still lands warm on wet ground, which is what a fire at night in the rain looks like.
+   *
+   * Measured over the town at the 165 m driving view: the grade reaches 80.5% of the
+   * frame and every prop in the other 19.5% is untouched, and the mean of what it does
+   * reach goes
+   *
+   *     wind #58724a -> #536c47   -11.0% relative luminance
+   *     heat #58724a -> #526b46   -13.1%
+   *     cold #57724a -> #4f6846   -17.8%
+   *     rain #57724a -> #4c6343   -25.2%
+   *
+   * which is four conditions a player can tell apart at a glance and none of them a
+   * curtain over the game. One screen-space fillRect — the sky is a screen-space fill too,
+   * and the whole frame wants the same grade — at 0.0025 ms on a 390x844 phone window.
+   */
+  drawWeatherGrade(ctx) {
+    const w = this.wind;
+    if (!(w.tint > 0.002)) return;              // `clear` is exactly nothing, as it is everywhere
+    const cam = this.camera;
+    ctx.save();
+    cam.resetTransform(ctx);
+    ctx.globalAlpha = w.tint;
+    ctx.fillStyle = w.sky;
+    ctx.fillRect(0, 0, cam.cssW, cam.cssH);
+    ctx.restore();
   }
 
   /** Grass with something in it. A flat fill reads as a spreadsheet cell; a few
@@ -1064,13 +1160,45 @@ export class Renderer {
     this.drawEmbers(ctx, state, t);
   }
 
+  /**
+   * A puff, three deep, blown downwind as it rises.
+   *
+   * The lean is the load-bearing half of this drawing. The fire's exposure jump is biased
+   * toward the building DOWNWIND of it (src/sim/weather.js: windBias, 0.75 in a wind), so
+   * the building the column is pointing at is the one that catches next. That makes the
+   * smoke a piece of tactical information rather than an effect, and information has to be
+   * on the screen: a player choosing which exposure to protect should be reading the sky,
+   * not the top bar.
+   *
+   * It leans the same way in world metres that the wind blows, so the drift is drawn in
+   * the projection everything else is drawn in and a northerly foreshortens exactly as it
+   * should. It accelerates a little with height rather than running dead straight — a
+   * column that leaves the roof already sideways reads as a jet, not as smoke.
+   *
+   * Measured on a working structure fire at a 90 m view: the head of the plume sits a mean
+   * of 12.0 m apart between an easterly and a westerly at the same instant, over six
+   * sampled instants — 2.5 m at the tightest and 20.9 at the widest, because how far a
+   * puff has leaned depends on how long it has been up there. 12 m is 213 px of a 1600 px
+   * frame against a column 13 m tall, which is the bearing being legible rather than
+   * merely present.
+   *
+   * NOT damped by prefers-reduced-motion, deliberately, while the wobble beside it is.
+   * The wobble is decoration and the lean is the information, and src/ui/a11y.js states
+   * the rule this follows: losing the animation must never lose the information. A player
+   * who asked for less movement still has to know which way the fire is going.
+   */
   drawSmokePuff(ctx, x, y, baseH, strength, t, seed) {
     const cam = this.camera;
+    const wind = this.wind;
     for (let k = 0; k < 3; k++) {
       const phase = (t * 0.5 + k * 0.33 + seed * 0.17) % 1;
       const rad = 1.1 + phase * 2.9;
       const alpha = (1 - phase) * 0.15 * strength;
-      const p = cam.top(x + wobble(seed + k, t, 1.2) * 2.4 * this.motion.smokeDrift, y, baseH + 1 + phase * 13);
+      const lean = wind.lean * WIND_LEAN_M * phase * (0.45 + 0.55 * phase);
+      const p = cam.top(
+        x + wind.dx * lean + wobble(seed + k, t, 1.2) * 2.4 * this.motion.smokeDrift,
+        y + wind.dy * lean,
+        baseH + 1 + phase * 13);
       ctx.fillStyle = `rgba(66,64,70,${alpha.toFixed(3)})`;
       ctx.beginPath();
       ctx.ellipse(p.x, p.y, rad, rad * 0.86, 0, 0, Math.PI * 2);
@@ -1078,9 +1206,11 @@ export class Renderer {
     }
   }
 
-  /** Embers riding the column. Deterministic — no Math.random in the renderer. */
+  /** Embers riding the column: same wind, same lean, and they are the thing that actually
+   *  starts the next fire. Deterministic — no Math.random in the renderer. */
   drawEmbers(ctx, state, t) {
     const cam = this.camera;
+    const wind = this.wind;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (const h of state.hazards) {
@@ -1095,7 +1225,11 @@ export class Renderer {
         for (let k = 0; k < 2; k++) {
           const phase = (t * 0.42 + i * 0.29 + k * 0.5) % 1;
           const a = (1 - phase) * 0.5;
-          const p = cam.top(c.x + wobble(i + k, t, 0.9) * 3.2 * this.motion.emberDrift, c.y, base + phase * 15);
+          const lean = wind.lean * WIND_LEAN_M * phase * (0.45 + 0.55 * phase);
+          const p = cam.top(
+            c.x + wind.dx * lean + wobble(i + k, t, 0.9) * 3.2 * this.motion.emberDrift,
+            c.y + wind.dy * lean,
+            base + phase * 15);
           ctx.fillStyle = `rgba(255,${170 + Math.round(phase * 60)},90,${a.toFixed(3)})`;
           ctx.beginPath();
           ctx.arc(p.x, p.y, 0.26 * (1 - phase * 0.5), 0, Math.PI * 2);
@@ -1103,6 +1237,79 @@ export class Renderer {
         }
       }
     }
+    ctx.restore();
+  }
+
+  /**
+   * Rain: short streaks between the camera and the town, leaning with the wind.
+   *
+   * Screen space, which is the cheap way and also the honest one — rain is not lying on
+   * the ground plane, it is falling in front of it. That is the cull as well: the streaks
+   * are laid out across the band the wind blows them through, which is the window plus the
+   * drift and nothing else, so the count never follows the size of the town. One path, one
+   * stroke, capped at RAIN_MAX. Measured at 0.0095 ms on a 390x844 phone window; and a
+   * hard rain blowing across a 1600x900 frame is 122 streaks laying ink on a mean of 1845
+   * pixels of 1.44 Mpx over eight sampled instants (1788 to 1912) — 0.13% of the frame, so
+   * there is nothing here for a label or a casualty's ring to hide behind.
+   *
+   * A streak is a pure function of (i, t): the R2 low-discrepancy sequence on the index
+   * gives the column and the phase, so there is no Math.random and no per-frame state to
+   * keep. wobble() would have done for determinism but not for spread — it is two sines
+   * summed, and stepping it by index clusters the streaks into visible bands about
+   * fifteen apart, which reads as a curtain rather than as rain.
+   *
+   * The fall rate borrows this.motion.smokeDrift. Every animation in the game is damped
+   * for prefers-reduced-motion through a scalar in src/ui/a11y.js ANIMATION_RATES, that
+   * table is asserted against this file (m10 H20/H21), and it is not mine to add a row
+   * to; smokeDrift is the nearest thing already in it — the same weather, the same air,
+   * and 0.5 Hz against this 1.6 Hz. At the reduced scalar of 0.3 the rain still falls,
+   * slowly, because rain that stops is a player who cannot tell that it is raining.
+   */
+  drawRain(ctx, t) {
+    const w = this.wind;
+    if (w.id !== 'rain' || w.strength <= 0) return;
+    const cam = this.camera;
+
+    /* Only the east-west half of the wind can tilt a falling streak. The north-south half
+     * runs into the screen in this projection, so a northerly blows the rain away from the
+     * camera and what is coming at you is still a vertical line.
+     *
+     * The drift is a fraction of the FALL, not a fixed number of pixels, because what the
+     * eye reads is the angle. The first pass drifted 30 px over a 940 px fall, which
+     * measured 1.8 degrees off vertical — no lean at all. 0.32 of the fall is 17.7 by
+     * construction and measures 15.9 east and -16.7 west off the rasterised streaks, with
+     * a wind running due north or south measuring exactly 0. That last number is the one
+     * worth having: it says the tilt is reading the real bearing and not just the
+     * strength, which is the same thing the smoke is being trusted to say. */
+    const fall = cam.cssH + 40;
+    const drift = w.dx * w.strength * fall * 0.32;
+    const pad = Math.abs(drift);
+    const span = cam.cssW + pad;
+    // start the band upwind, so streaks blow INTO the frame rather than out of an empty edge
+    const originX = drift < 0 ? 0 : -pad;
+    const n = Math.min(RAIN_MAX, Math.round((span * cam.cssH * w.strength) / RAIN_PX_PER_STREAK));
+    if (n < 1) return;
+
+    /* save/restore, and not for tidiness. This is the last thing drawn in world-agnostic
+       screen space, so a lineWidth left behind here is inherited by the NEXT frame, where
+       the transform is in metres and 1 means one metre. Measured before the save went in:
+       223k pixels of a 1.44 Mpx frame came out different between two renders of the same
+       instant — a whole frame quietly shifted by a leaked stroke width. */
+    ctx.save();
+    ctx.strokeStyle = 'rgba(198,216,238,0.26)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const col = (i * 0.7548776662) % 1;
+      const ph = (i * 0.5698402910) % 1;
+      const y = ((t * 1.6 * this.motion.smokeDrift + ph) % 1) * fall - 20;
+      const len = 9 + ph * 8;
+      const x = originX + col * span + (y / fall) * drift;
+      // the streak lies along the trajectory: the drift it covers in `len` of falling
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (len / fall) * drift, y + len);
+    }
+    ctx.stroke();
     ctx.restore();
   }
 

@@ -8,6 +8,7 @@
 
 import { CONFIG } from '../config.js';
 import { BUILDING_BY_ID } from '../data/town.js';
+import { describeWeather } from '../sim/weather.js';
 
 export function buildShiftReport(state) {
   const rows = state.incidents.map((inc) => ({
@@ -48,6 +49,10 @@ export function buildShiftReport(state) {
        not, and it is the only line here that is about people rather than buildings. */
     residentsOut: o.residentsOut || 0,
     residentsTrapped: o.residentsTrapped || 0,
+    /* What the night was like. A paper reports the weather because it is context for
+       everything else on the page, and here it is literally that: the multipliers the
+       whole shift was fought under. */
+    weather: state.weather ? { ...state.weather, text: describeWeather(state.weather) } : null,
     damaged,
     brokenHydrants,
     confidenceStart: o.confidenceStart,
@@ -120,7 +125,10 @@ function standfirstFor(r) {
   }
   if (r.telemetry.callsNeverWorked) bits.push(`${r.telemetry.callsNeverWorked} never attended`);
   bits.push(`${(r.telemetry.distanceDrivenM / 1000).toFixed(1)} km driven`);
-  return `${bits.join(' · ')}.`;
+  const tail = `${bits.join(' · ')}.`;
+  // The weather goes at the end, as a sentence, because it is the context for the rest
+  // of the line rather than another item in it.
+  return r.weather && r.weather.id !== 'clear' ? `${tail} ${r.weather.text} all shift.` : tail;
 }
 
 /** Town confidence as a phrase, for the HUD and the report. Deliberately not the word

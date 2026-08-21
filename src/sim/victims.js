@@ -11,6 +11,7 @@
 import { CONFIG } from '../config.js';
 import { BUILDING_BY_ID, CLINIC, dist, clampToBounds } from '../data/town.js';
 import { heatAt, liveZoneAt } from './hazards.js';
+import { weatherFor } from './weather.js';
 
 let nextId = 1;
 export function resetVictimIds() { nextId = 1; }
@@ -132,6 +133,11 @@ export function stepVictims(state, dtMs) {
     if (v.trappedBy) decline *= M.declineTrappedMul;
     const heat = heatAt(state, v.x, v.y);
     if (heat > 0.15) decline *= 1 + (M.declineFireMul - 1) * Math.min(1, heat);
+    /* A cold snap moves the pressure off the structure and onto the people. It is the
+     * only condition that makes the MEDICAL clock the hard one, and it applies outdoors
+     * and in — the shed a casualty is lying in is not heated either. 1.0 in anything but
+     * cold, so every other night is the medical model as measured. */
+    decline *= weatherFor(state).patientDecline;
 
     /* A live wire down across the car is a barrier to REACHING them, which is what the
      * GDD asks of the utility family — not an execution.

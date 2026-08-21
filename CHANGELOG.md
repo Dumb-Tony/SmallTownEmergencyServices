@@ -1,5 +1,78 @@
 # Changelog
 
+## 2026-08-20 — weather, as a set of multipliers rather than an event
+
+The GDD asks for weather as "modifiers that generate and connect incidents rather than
+launching a separate scripted level", and that sentence rules out most of what a weather
+feature usually is. There is no storm event, no flood level, no scripted sequence.
+`src/sim/weather.js` is a small table of bounded multipliers on numbers the systems
+already read, so a windy night is the same game with the fire behaving differently — and
+the difference turns up in decisions the player was already making.
+
+**Clear is exactly 1.0 on every multiplier**, which is the game as it was, and nothing is
+more than a factor of 2.2 from neutral. The same fire, unattended, at ninety seconds:
+
+| | clear | wind | rain | cold snap | heat |
+|---|---|---|---|---|---|
+| **of the building burnt** | 32% | 32% | **14%** | 21% | **61%** |
+
+- **Wind** does not change how fast a room burns — it changes **where it goes next**. Gas
+  blows away nearly twice as fast, which is the one mercy in it.
+- **Rain** slows a fire and costs the engine its top speed: 17.0 → 13.9 m/s on Main
+  Street. Time on the fire, paid for on the way there — a trade the player makes with the
+  throttle rather than reads off a status line.
+- **A cold snap** moves the pressure off the structure and onto the people and the water:
+  a casualty declines 30% faster and the mains run at 70%.
+- **Heat** drives everything.
+
+**The wind decides which building catches — and the first version of that rule did
+nothing at all.** It re-ranked the candidate exposures by how downwind they were, which
+is the obvious design and measured as exactly zero difference: fourteen runs with the
+wind blowing straight at Miller Barn and fourteen with it blowing straight away, and the
+barn caught 14 times out of 14 in both. **Seven of the nine workable buildings in this
+town have no exposure at all inside the 9 m jump distance, and the other two have exactly
+one.** A rule that reorders a list of one has no outputs.
+
+So the wind moves the REACH rather than the ranking: downwind an ember carries to about
+13 m, upwind it barely leaves the building. Measured after: **the barn catches 10 times
+out of 10 downwind and 0 out of 10 upwind**, with still air unchanged at 10 of 10. That
+turns "which exposure do I protect" from a distance calculation you do once into
+something you read off where the smoke is going.
+
+The law is the same one the residents got: weather may not create a call, close one, or
+make a shift unwinnable. A bot shift in every condition closes calls in all five, and the
+hardest (heat, 35% confidence) is measurably harder than the easiest (clear, 64%) without
+being impossible — GDD rule 9, recoverable failure.
+
+It rolls from its own named stream, carries in the save as the GDD's "recent weather" so
+tomorrow weights a repeat down (24 back-to-back repeats in 200 shifts), and a condition id
+that is not in the table is refused on load rather than believed.
+
+**It also broke the playability gate, which turned out to be the right kind of failure.**
+`tools/m5-tests.js` asserts the medical chain completes end to end in a real bot shift —
+the GDD's own "does it play?" — and its two pinned seeds happened to roll the two
+conditions where it does not. Measured across all five: the casualty reaches the clinic in
+clear, in wind and in a cold snap, and does not in rain or heat. **Rain is the surprise**,
+because its only medical effect is 18% off the ambulance's top speed; the rest is
+emergent, and in the other direction from the multiplier. A slower fire is less hazard
+pressure, the dispatcher is pressure-aware, so **a wet shift is a busier shift** — the
+merciful-looking condition on the table is the one that overruns the crew.
+
+So m5 now pins itself to clear conditions, because a gate has to control its variables,
+and "can weather make the chain impossible?" moved into m13 where it is the subject rather
+than the noise. A playability gate that silently depends on a dice roll is a flaky test
+wearing the clothes of a design claim.
+
+Three numbers of it go on the wire (`PROTOCOL_VERSION` 3) — the client does not simulate
+and needs none of the multipliers, but it draws, and a partner watching a rainstorm under
+a clear sky with the smoke going the wrong way is watching a different game.
+
+`tools/m13-tests.js` — 78 assertions, most of them about whether the weather is
+OBSERVABLE at all. That is the real failure mode for a modifier layer: a 20% multiplier on
+a number nobody was watching ships, reads well in a changelog, and never once changes a
+decision. `tools/_weatherdiag.js` is the measurement.
+
+
 ## 2026-08-20 — the town has people in it
 
 "The town keeps going without you" has meant calls arriving and fires spreading on their

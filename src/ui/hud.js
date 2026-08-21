@@ -15,6 +15,7 @@ import { contextPrompt, toolsInReachOf, heldTool } from '../sim/interaction.js';
 import { victimState } from '../sim/victims.js';
 import { gasAt } from '../sim/hazards.js';
 import { stillInside } from '../sim/residents.js';
+import { describeWeather, CONDITIONS } from '../sim/weather.js';
 import { confidenceWord } from './shiftReport.js';
 
 const PRIORITY_CLASS = { routine: 'p-routine', high: 'p-high', critical: 'p-critical' };
@@ -39,6 +40,10 @@ export class Hud {
       <div id="topbar">
         <div class="pill" id="clock">10:00</div>
         <div class="pill" id="shift">Shift 1</div>
+        <!-- Tonight's conditions. It sits next to the shift number because it is the
+             same kind of fact: something about this shift that was decided before you
+             arrived and that you now have to work with. -->
+        <div class="pill" id="weather" title=""></div>
         <div class="pill mute" id="mute" title="M">SOUND</div>
         <div class="pill grow" id="confidence"><span class="label">Town</span>
           <span class="bar"><i></i></span><span class="word"></span></div>
@@ -95,6 +100,7 @@ export class Hud {
     this.el = {
       clock: this.root.querySelector('#clock'),
       shift: this.root.querySelector('#shift'),
+      weather: this.root.querySelector('#weather'),
       mute: this.root.querySelector('#mute'),
       confBar: this.root.querySelector('#confidence .bar i'),
       confWord: this.root.querySelector('#confidence .word'),
@@ -234,6 +240,12 @@ export class Hud {
     this.el.clock.textContent = GameClock.formatMs(left);
     this.el.clock.classList.toggle('urgent', left < 60000);
     this.el.shift.textContent = `Shift ${s.town.shiftNumber}`;
+    if (this.el.weather) {
+      const w = s.weather || { id: 'clear' };
+      this.el.weather.textContent = describeWeather(w);
+      this.el.weather.title = (CONDITIONS[w.id] || CONDITIONS.clear).note;
+      this.el.weather.classList.toggle('warn', w.id !== 'clear');
+    }
     this.el.confBar.style.width = `${Math.round(s.town.confidence * 100)}%`;
     /* This red is NOT --bad, on purpose, and the suite pins the divergence so nobody
      * "tidies" it (tools/m10-tests.js D25c).

@@ -13,6 +13,7 @@ import {
   circleHitsRect, pointInRect, isOnRoad, dist,
 } from '../data/town.js';
 import { hazardBlockAt, liveZoneAt } from './hazards.js';
+import { weatherFor } from './weather.js';
 
 /* ── on foot ──────────────────────────────────────────────────────────────── */
 
@@ -140,8 +141,13 @@ export function stepApparatusMovement(state, ap, intent, dtMs) {
 
   const onRoad = isOnRoad(ap.x, ap.y);
   const damagePenalty = 1 - Math.min(0.45, ap.damage * 0.5);
-  const maxFwd = def.maxSpeed * (onRoad ? 1 : D.offRoadMul) * damagePenalty;
-  const maxRev = def.reverseSpeed * (onRoad ? 1 : D.offRoadMul);
+  /* Wet tarmac. `roadGrip` is 1.0 in anything but rain, and it costs the crew on the way
+   * to a fire that the same rain is helping them fight — which is the trade, made with
+   * the throttle rather than read off a status line. It does NOT touch grass: a field is
+   * already the slow choice and halving it twice makes it a wall. */
+  const grip = onRoad ? weatherFor(state).roadGrip : 1;
+  const maxFwd = def.maxSpeed * (onRoad ? grip : D.offRoadMul) * damagePenalty;
+  const maxRev = def.reverseSpeed * (onRoad ? grip : D.offRoadMul);
 
   if (intent.throttle > 0) {
     ap.speed += def.accel * intent.throttle * dt;

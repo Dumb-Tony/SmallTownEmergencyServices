@@ -10,6 +10,7 @@
  */
 
 import { CONFIG } from '../config.js';
+import { CONDITION_IDS } from '../sim/weather.js';
 
 export const SAVE_KEY = 'stes.town.v1';
 export const SAVE_VERSION = 1;
@@ -25,6 +26,10 @@ export function defaultTown() {
     // Which of the five verbs this player has performed at least once. The coach reads
     // it to know when to stop talking; a save from before it existed simply has none.
     learned: {},
+    /* The GDD's "recent weather", and it does exactly one job: tomorrow's roll weights a
+     * repeat of it down. A save from before weather existed has null, which the roll
+     * reads as "no preference" — the same thing shift 1 sees. */
+    lastWeather: null,
   };
 }
 
@@ -67,6 +72,9 @@ export function migrate(data) {
     // Only the known lesson names survive a load, so a corrupt save cannot silence the
     // coach with junk keys — and an old save, which has none, simply starts learning.
     learned: sanitiseLearned(data.learned),
+    // A condition id, or nothing. Checked against the table rather than trusted, because
+    // this is the one field a hand-edited save could use to make up a sixth season.
+    lastWeather: CONDITION_IDS.includes(data.lastWeather) ? data.lastWeather : null,
   };
 }
 

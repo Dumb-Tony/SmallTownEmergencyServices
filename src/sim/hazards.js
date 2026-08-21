@@ -12,6 +12,9 @@
 
 import { CONFIG } from '../config.js';
 import { BUILDINGS, BUILDING_BY_ID, POLES, dist, nearestOf } from '../data/town.js';
+/* A state that predates weather, or a client shell that has not been sent one, reads
+ * `clear`: all 1.0, and the fire behaves exactly as it did before any of this existed. */
+import { weatherFor as mods, downwindFactor } from './weather.js';
 
 let nextId = 1;
 export function resetHazardIds() { nextId = 1; }
@@ -275,7 +278,7 @@ function stepFire(state, fire, dt, rng, out) {
     // already burning just made that cell impossible to knock down, because a nozzle
     // then had to out-cool the whole surrounding fire to darken one square. Working
     // the edge of a fire has to be a winnable fight or the hose is decoration.
-    const push = F.spreadPerSec * dt * Math.min(1, c.heat);
+    const push = F.spreadPerSec * dt * Math.min(1, c.heat) * mods(state).fireSpread;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue;
@@ -313,9 +316,25 @@ function stepFire(state, fire, dt, rng, out) {
   // from the barn along its east wall and 34 m from it along its west wall, so testing
   // one arbitrary cell meant the fire next door depended on array order.
   if (burning > 0) {
-    const chance = F.jumpChancePerSec * dt * Math.min(3, burning);
+    const W = mods(state);
+    const chance = F.jumpChancePerSec * dt * Math.min(3, burning) * W.fireJump;
     if (rng.chance(chance)) {
-      let best = null, bestD = F.jumpDistM;
+      /* Which exposure catches, and how far an ember gets.
+       *
+       * ⚠ THE FIRST VERSION OF THIS ONLY RE-RANKED THE CANDIDATES, and measured as doing
+       * absolutely nothing: 14 runs with the wind blowing straight at Miller Barn, 14
+       * with it blowing straight away, and the barn caught 14 times out of 14 in both.
+       * The barn is the ONLY structure within 9 m of the farmhouse, so a rule that
+       * reorders a list of one is a rule with no outputs. Almost every fire in this town
+       * has one exposure or none.
+       *
+       * So the wind moves the REACH, not the ranking. Downwind an ember carries further
+       * — up to about 13 m at full strength — and upwind it barely leaves the building.
+       * That produces outcomes the still-air rule cannot: a building that was safe by
+       * distance catches because it is downwind, and the one 6 m upwind does not. The
+       * ranking bias stays as a tiebreak for the rare pair. */
+      const w = state.weather;
+      let best = null, bestScore = Infinity;
       for (const b of BUILDINGS) {
         if (b.id === fire.buildingId || b.kind === 'clinic' || b.kind === 'station') continue;
         if (state.hazards.some((x) => x.kind === 'fire' && x.buildingId === b.id)) continue;
@@ -324,7 +343,12 @@ function stepFire(state, fire, dt, rng, out) {
           const nx = Math.min(b.x + b.w, Math.max(b.x, c.x));
           const ny = Math.min(b.y + b.h, Math.max(b.y, c.y));
           const d = dist(c.x, c.y, nx, ny);
-          if (d <= bestD) { bestD = d; best = b; }
+          // 0.5 in still air and for a bearing across the wind, 1 straight downwind.
+          const down = W.windBias ? downwindFactor(w, c.x, c.y, nx, ny) : 0.5;
+          const reach = F.jumpDistM * (1 + W.windBias * (down - 0.5) * 1.2);
+          if (d > reach) continue;
+          const score = d / (reach / F.jumpDistM);   // downwind counts as closer
+          if (score < bestScore) { bestScore = score; best = b; }
         }
       }
       if (best) out.push({ type: 'FIRE_EXTENDED', fromHazardId: fire.id, buildingId: best.id });
@@ -335,7 +359,7 @@ function stepFire(state, fire, dt, rng, out) {
 function stepGas(state, gas, dt, rng, out) {
   const G = CONFIG.gas;
   if (!gas.shutOff) gas.ppm = Math.min(1.4, gas.ppm + G.leakRatePerSec * dt);
-  gas.ppm = Math.max(0, gas.ppm - G.dispersePerSec * dt);
+  gas.ppm = Math.max(0, gas.ppm - G.dispersePerSec * dt * mods(state).gasDisperse);
   gas.resolved = gas.shutOff && gas.ppm < 0.10;
 
   if (!gas.flashed && gas.ppm >= G.ignitionThreshold) {

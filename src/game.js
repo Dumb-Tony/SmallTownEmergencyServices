@@ -32,6 +32,7 @@ import { stepInteraction } from './sim/interaction.js';
 import {
   createResidents, stepResidents, resetResidentIds, crowdDragAt,
 } from './sim/residents.js';
+import { rollWeather, describeWeather } from './sim/weather.js';
 import { buildShiftReport } from './ui/shiftReport.js';
 import {
   encodeSnapshot, applySnapshot, encodeCommand, decodeCommand, EMPTY_COMMAND,
@@ -92,6 +93,10 @@ export function createInitialState({ seed, seedLabel, town }) {
 
     hazards: [],
     victims: [],
+    /* Tonight's weather. A set of bounded multipliers on numbers the systems already
+     * read — not an event, not a level. `clear` is 1.0 on every one of them. */
+    weather: rollWeather(new Rng((seed ^ 0x2545f491) >>> 0, 'weather'), town.lastWeather || null),
+
     /* The people who live here, drawn from a stream of their own.
      *
      * A SEPARATE stream on purpose. Residents draw at spawn and again every time somebody
@@ -196,7 +201,8 @@ export class Game {
     this.bus.clearLog();
     this.state = createInitialState({ seed, seedLabel: this.seedLabel, town: this.town });
     this.state.mode = MODES.PLAYING;
-    radio(this.state, `Shift ${this.town.shiftNumber} on. Station is in service.`, 'system');
+    radio(this.state, `Shift ${this.town.shiftNumber} on. Station is in service. ` +
+      `${describeWeather(this.state.weather)}.`, 'system');
     this.bus.emit('SIM_RESET', { seed }, 0);
     this._notify();
     return this.state;
@@ -538,7 +544,11 @@ export class Game {
     }
 
     s.report = buildShiftReport(s);
-    this.town = advanceShift({ ...s.town, confidence: s.town.confidence }, s.report.headline);
+    /* "Recent weather" is in the GDD's persistence list, and it earns its place by doing
+     * one job: tomorrow's roll knows what today was, and weights a repeat down. Two
+     * identical shifts in a row is not weather, it is a constant. */
+    this.town = advanceShift(
+      { ...s.town, confidence: s.town.confidence, lastWeather: s.weather.id }, s.report.headline);
     saveTown(this.town);
     this.bus.emit('SHIFT_ENDED', { report: s.report }, s.simTimeMs);
     this._notify();

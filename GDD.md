@@ -276,4 +276,31 @@ Do not build yet:
 
 ### Current prototype status
 
-The first browser build implements the Phase 0–3 skeleton in a single continuous top-down town. It includes keyboard/touch movement, three drivable apparatus, tool retrieval constraints, five timed incident families, simultaneous dispatch calls, staged crash response, worsening priority, a road-blocking tree, and device-local town confidence. Its symbolic proximity interactions are explicitly prototype shortcuts.
+*(Last revised 2026-08-20. The paragraph below described the first build and had gone
+several milestones out of date; what follows is what is actually in the tree.)*
+
+**Phases 0–5 are complete.** One continuous town rendered in a three-quarter view over a
+flat simulation, keyboard and touch movement, three drivable apparatus with
+non-overlapping loadouts, tool retrieval constraints, five timed incident families across
+eleven templates, simultaneous dispatch, staged crash response, worsening priority, a
+road-blocking tree, and cross-shift consequences the player is shown by name at the moment
+they are handed over.
+
+Beyond the MVP scope, and in each case because a prior gate exposed the gap:
+
+- **local co-op and host-authoritative WebRTC netcode** (Phase 5), joined by a link rather
+  than a typed code;
+- **a synthesised audio layer** whose mix is a pure function of state;
+- **residents** — the GDD's `NPCs` core system. Every building has people in it who get
+  themselves out of a burning one faster than the crew can cross town, so what the player
+  is given is a count of who did not;
+- **weather** — the GDD's `Weather` core system, as bounded multipliers on numbers the
+  other systems already read, with `clear` at exactly 1.0 so it can only ever change the
+  other four conditions.
+
+Its symbolic proximity interactions remain explicitly prototype shortcuts.
+
+Everything above is held down by a headless-browser suite — 1255 assertions across
+fifteen files — including a crew bot that plays whole shifts through the real input path,
+a computed colour/contrast/colour-vision audit, and a robustness suite that soaks six
+shifts without a reload. See `README.md` for what each suite is for.

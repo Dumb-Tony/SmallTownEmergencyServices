@@ -40,6 +40,7 @@ import {
 import { heatAt, gasAt } from './hazards.js';
 import { createVictim } from './victims.js';
 import { resolveOnFoot } from './movement.js';
+import { weatherFor } from './weather.js';
 
 let nextId = 1;
 export function resetResidentIds() { nextId = 1; }
@@ -231,7 +232,8 @@ export function stepResidents(state, dtMs, rng) {
            * half to assemble out of whoever happened to be wandering past — which is not
            * a crowd, it is a coincidence. They leave by the door like anyone else; the
            * ring is chosen once they are on the street. */
-          if (worthWatching(state, r, R) && rng.float() < R.curiosityChance * dt) {
+          if (worthWatching(state, r, R) &&
+              rng.float() < R.curiosityChance * dt * weatherFor(state).curiosity) {
             r.state = 'about';
             r.tx = home.door.x; r.ty = home.door.y;
             resetSteering(r);

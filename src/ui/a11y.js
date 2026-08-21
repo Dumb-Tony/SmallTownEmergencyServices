@@ -352,6 +352,9 @@ const BRIGHT_BACKDROPS = ['page', 'road', 'grass', 'field', 'lot', 'pond', 'kerb
 export const TEXT_PAIRS = Object.freeze([
   // top bar
   { id: 'pill', where: 'top-bar pill text', src: 'styles.css .pill', fg: CSS_TOKENS.paper, px: 13, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
+  // The weather pill on a night that is not clear. Amber on the pill plate, and the one
+  // pill in the bar whose whole job is to be noticed the moment it is not the default.
+  { id: 'pill-warn', where: 'weather, when it matters', src: 'styles.css .pill.warn', fg: CSS_TOKENS.warn, px: 13, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
   { id: 'clock-urgent', where: 'clock, last minute', src: 'styles.css #clock.urgent', fg: CSS_TOKENS.coral, px: 16, bold: true, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
   { id: 'conf-label', where: '"TOWN" label', src: 'styles.css #confidence .label', fg: CSS_TOKENS.dim, px: 11, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },
   { id: 'conf-word', where: 'confidence word', src: 'styles.css #confidence .word', fg: CSS_TOKENS.dim, px: 12, bg: [PLATES.pill], over: BRIGHT_BACKDROPS },

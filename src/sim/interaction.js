@@ -17,6 +17,7 @@ import { TOOL_DEFS } from '../data/equipment.js';
 import { HYDRANTS, POLES, CLINIC, dist, nearestOf } from '../data/town.js';
 import { applyWater } from './hazards.js';
 import { treatVictim, victimHandled } from './victims.js';
+import { weatherFor } from './weather.js';
 
 export function heldTool(state, r = state.player) {
   return r && r.toolId ? state.tools.find((t) => t.id === r.toolId) : null;
@@ -461,7 +462,9 @@ function applyWaterSupply(state, dtMs) {
       ap.hydrantId = null;
       continue;
     }
-    ap.waterL = Math.min(def.tankL, ap.waterL + CONFIG.water.hydrantSupplyLps * (dtMs / 1000));
+    // Half-frozen mains in a cold snap; 1.0 in everything else.
+    ap.waterL = Math.min(def.tankL, ap.waterL +
+      CONFIG.water.hydrantSupplyLps * weatherFor(state).hydrantFlow * (dtMs / 1000));
   }
 }
 

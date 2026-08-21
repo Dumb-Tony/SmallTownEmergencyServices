@@ -128,6 +128,27 @@ Things that are *systems*, not scripts, and therefore chain into each other:
 - a trunk across the lane genuinely blocks the lane, so the shortest route stops being the shortest route;
 - flattening a hydrant with the engine puts it out of service — this shift and the next.
 
+## And no two nights are the same
+
+![Grange Hardware fully involved in heavy rain, the ground graded blue and the streaks
+falling across the street](docs/m13-weather.png)
+
+Every shift gets a condition: clear, windy, rain, a cold snap, or heat. There is no storm
+event and nothing is scripted — it is a handful of multipliers on numbers the game already
+read, so the weather turns up in decisions you were already making.
+
+The same fire, unattended, ninety seconds in: **14% of the building gone in rain, 32%
+clear, 61% in heat.** Rain also costs the engine its top speed, so it buys you time on the
+fire and charges you for it on the way there. A cold snap leaves the fire alone and comes
+after the people instead — casualties decline faster and the hydrants run slow.
+
+**The wind decides which building catches next.** Downwind an ember carries half again as
+far; upwind it barely leaves the building. Watch where the smoke is going and you know
+which exposure to stand in front of.
+
+Nothing the weather does can create a call, close one, or make a shift impossible — the
+hardest condition is measurably harder, not unwinnable.
+
 ## And people live here
 
 ![A household out on the street and the neighbours come to look, while the pizzeria burns](docs/m12-residents.png)
@@ -241,6 +262,12 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   geometry, persistence, loadouts, movement, live frames, determinism. Section H2 greps
   every source file for `Math.random`, which `src/core/rng.js` claimed for months without
   anything behind it — and that is exactly how the audio layer came to be built on one.
+- `tools/m13-tests.js` — the weather. Mostly about whether it is OBSERVABLE at all, which
+  is the real failure mode for a modifier layer: a 20% multiplier on a number nobody was
+  watching ships, reads well, and never changes a decision. It also holds the law —
+  weather may not create a call, close one, or make a shift unwinnable — and the town
+  measurement that forced the wind to move an ember's REACH rather than re-rank the
+  exposures. `tools/_weatherdiag.js` is the run behind every number in the table.
 - `tools/m12-tests.js` — the people who live here. That a household gets itself out
   before the crew arrives, that the ones who don't become findable casualties rather than
   statistics, that a crowd is friction and the siren clears it — and, mostly, that none of
@@ -304,8 +331,8 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**1177 assertions** — m0 146 · m1 113 · m2 57 · m3 99 · m4 59 · m5 31 · m6 42 · m7 35 ·
-m8 34 · m9 94 · m10 226 · m11 105 · m12 98 · boot-check 38.
+**1255 assertions** — m0 146 · m1 113 · m2 57 · m3 99 · m4 59 · m5 31 · m6 42 · m7 35 ·
+m8 34 · m9 94 · m10 226 · m11 105 · m12 98 · m13 78 · boot-check 38.
 
 Suites emit progressively, so a hang still reports how far it got.
 
