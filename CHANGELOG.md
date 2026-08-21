@@ -62,7 +62,7 @@ went 4242 B → 3247 B. `PROTOCOL_VERSION` is 2.
 
 Whole-town cost: **0.0196 ms a step**, 19 residents, no allocation growth.
 
-`tools/m12-tests.js` — 90 assertions, including the ones that keep them out of the game:
+`tools/m12-tests.js` — 98 assertions, including the ones that keep them out of the game:
 residents create no calls, drive nothing, hold no tools, cannot join the crew, and cannot
 keep a call from closing. `tools/_residentdiag.js` is the run behind every number above.
 

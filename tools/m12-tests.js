@@ -29,6 +29,7 @@ import {
   stillInside, alreadyOut, RESIDENT_STATES,
 } from '../src/sim/residents.js';
 import { encodeSnapshot, applySnapshot } from '../src/net/protocol.js';
+import { reportCard } from '../src/ui/hud.js';
 import { Rng } from '../src/core/rng.js';
 
 const STEP = CONFIG.sim.stepMs;
@@ -482,6 +483,50 @@ lines.push('--- E. residents act on the town; they never act on the game ---');
 emit('E done');
 }
 
+/* ── G. what the report says about them ──────────────────────────────────── */
+
+function sectionG() {
+lines.push('--- G. the report says what happened to the people, not just the buildings ---');
+  clearSave();
+  const g = new Game({ seed: 1250 });
+  g.startShift();
+  const s = g.state;
+  const target = BUILDINGS.map((b) => b.id)
+    .find((id) => s.residents.filter((r) => r.homeId === id).length >= 2 &&
+      id !== 'station' && id !== 'clinic');
+  const { inc } = fireAt(g, target);
+  const doomed = s.residents.find((r) => r.homeId === target);
+  doomed.exposureMs = R.collapseMs - 200;
+  run(g, 40000, inc);
+
+  s.simTimeMs = CONFIG.shift.durationMs;
+  g.endShift();
+  const rep = s.report;
+  ok('G1 the shift reached a report', !!rep);
+  ge('G2 which counts the people who got themselves out', rep.residentsOut, 1);
+  ge('G3 and the ones who did not', rep.residentsTrapped, 1);
+  ok('G4 and says so in the standfirst, in words',
+    /got themselves out|out of a burning building|did not get out/i.test(rep.standfirst),
+    rep.standfirst);
+  /* A number computed and never rendered is not a feature — the same failure the
+     next-shift block was written to fix. */
+  const card = reportCard(rep);
+  ok('G5 and the card renders it', /Residents/.test(card));
+  ok('G6 with both halves of it', new RegExp(`${rep.residentsOut} got themselves out`).test(card),
+    card.slice(card.indexOf('Residents'), card.indexOf('Residents') + 160));
+
+  // a shift where nobody had to leave says so, rather than showing a bare zero
+  clearSave();
+  const q = new Game({ seed: 1251 });
+  q.startShift();
+  q.state.simTimeMs = CONFIG.shift.durationMs;
+  q.endShift();
+  eq('G7 a shift with no fire counts nobody out', q.state.report.residentsOut, 0);
+  ok('G8 and the card says that in words rather than printing a zero',
+    /nobody had to leave a building/.test(reportCard(q.state.report)));
+emit('G done');
+}
+
 /* ── F. the wire ─────────────────────────────────────────────────────────── */
 
 function sectionF() {
@@ -554,7 +599,7 @@ emit(null);
 
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
-  sectionA(); sectionB(); sectionC(); sectionD(); sectionE(); sectionF();
+  sectionA(); sectionB(); sectionC(); sectionD(); sectionE(); sectionG(); sectionF();
 } catch (err) {
   fails++;
   lines.push(`FAIL  suite threw: ${err && err.message}`);

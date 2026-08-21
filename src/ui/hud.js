@@ -453,6 +453,10 @@ export function reportCard(r) {
       <div><b>Structures</b><br>${damage}</div>
       <div><b>Water supply</b><br>${hyd}</div>
       <div><b>Patients</b><br>${r.patientsSaved} transported · ${r.patientsLost} lost</div>
+      <div><b>Residents</b><br>${r.residentsOut === 0 && r.residentsTrapped === 0
+        ? 'nobody had to leave a building'
+        : `${r.residentsOut} got themselves out${r.residentsTrapped
+          ? ` · <span class="st lost">${r.residentsTrapped} did not</span>` : ''}`}</div>
       <div><b>Driving</b><br>${(r.telemetry.distanceDrivenM / 1000).toFixed(1)} km · ${Math.round(r.telemetry.litresUsed)} L of water</div>
       <div><b>First split decision</b><br>${r.telemetry.firstSplitMs == null ? 'never split' : GameClock.formatMs(r.telemetry.firstSplitMs)}</div>
     </div>
