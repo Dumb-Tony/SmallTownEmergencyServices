@@ -1,5 +1,109 @@
 # Changelog
 
+## 2026-08-21 — Tanker 1, and three wrong reasons for it
+
+The previous milestone measured a crew of four and found the fourth pair of hands had
+nothing to drive: three trucks, four volunteers, and a shift that closed exactly as many
+calls with four as with two. The GDD files the answer under long-term progression —
+*"additional apparatus BROADENS capability instead of providing percentage upgrades"* — so
+the fix is a fourth capability, not a better engine.
+
+**Tanker 1**: 6000 L, a hydrant wrench, and no hose. It cannot put a drop on a fire by
+itself. Parked within nine metres of the engine it pumps into its tank at 14 L/s — slower
+than a hydrant, because a hydrant is mains pressure and this is a pump between two trucks —
+and it spends exactly what it gives. It is also the slowest thing in the station, the
+slowest to get going, the worst at stopping, and the biggest thing on the road.
+
+### The part worth reading: I was wrong about what it was for, three times
+
+The suite's job was to answer one question — *is there a call that goes better with it
+than without?* — because **a fourth appliance that makes no difference is a fourth
+appliance**. Section D asked it badly three times, and each wrong premise was wrong in a
+different way.
+
+1. **Fight Miller Barn the instant it lights.** Both runs came back identical to the
+   digit: `out · 93% burnt · 2208 L`. 2208 L is less than the engine's own 2500, so the
+   tanker was never touched. A test that cannot detect "no effect" is not a test — this
+   one could, and it did.
+2. **Assume the fire just needs a head start**, and sweep how long it burned first. The
+   water used went **down**: 2208 → 1065 → 704 → 344 L. Not a bug. A building alight for
+   ninety seconds has already consumed itself and there is less left to cool. In this model
+   water demand **peaks when you arrive early and try to save the place**.
+3. **Assume the building is the variable** and sweep all eleven. Two of them — the feed
+   store at 72 cells and the apartments at 108 — wanted more than one tank. But only
+   because the stream was poured from one fixed spot, which reaches a fraction of a big
+   shed and loses 96% of it whatever the supply. Give the nozzle a crew that **walks**, on
+   the 34 m line it is actually tethered by, and every structure in town at every head
+   start comes in under 1500 L:
+
+   | | 0 s | 45 s | 90 s |
+   |---|---|---|---|
+   | Miller Barn | 96 L | 884 L | 344 L |
+   | Vance Feed & Grain | 116 L | 1458 L | 800 L |
+   | Sutter Apartments | 146 L | 1343 L | 790 L |
+
+**So no single fire in this town needs more than one tank, and the suite now asserts
+that** — if the fire model ever changes underneath, the claim fails loudly instead of
+rotting into marketing.
+
+What 2500 L does not cover is a **shift**. Three structure fires at the far end of the
+valley — barn, feed store, garage, 40/33/57 m from the nearest hydrant against a seven
+metre hookup radius — and the engine is dry on the third. Refilling means dropping the
+line, driving the truck out of the fire, charging a hydrant, filling, driving back:
+
+```
+shift          total    refill trips      barn / feedstore / garage lost
+engine alone    457 s   1 trip  (114 s)   63% / 75% / 87%
+with a tanker   422 s   0 trips (0 s)     63% / 75% / 78%
+```
+
+114 seconds with the building burning unopposed, and nine points of the garage. That is
+what the fourth truck buys, and it is why a real rural department owns one. The first two
+fires are identical in both columns — it does not touch the calls that never needed it.
+
+### The rest of it
+
+- **A fourth bay**, at the same 14 m spacing as the other three. The apron was
+  deliberately *not* widened: `atStation` measures from the apron rectangle, and widening
+  it put the Main Street junction inside the 22 m tidy radius, which would have quietly
+  broken the station's memory of where you left things.
+- **The hydrant wrench now charges the nearest truck, not the first one in the file.** It
+  used to `find` the first apparatus in `APPARATUS_DEFS` order — always the engine — so
+  standing at a hydrant with the tanker in front of you charged a truck across town.
+- **Four trucks for four volunteers, and four distinct capabilities**: water on a fire, a
+  ride to the clinic, tools, and water where there is none.
+- **The HUD now says the shuttle is working, from both cabs** — `Engine 1 · water 507 L ·
+  fed by Tanker 1` and `Tanker 1 · water 5993 L · feeding Engine 1`, and
+  `nothing hooked up` when it is parked doing neither. `applyTankerSupply`'s own comment
+  had claimed "the HUD reads this" about `suppliedBy` since the hour it was written, and
+  the HUD did not read it at all. A tanker whose work is invisible is a tanker nobody
+  drives.
+
+### Two things the fourth truck broke on its way in
+
+Neither would have been caught by reading the diff.
+
+- **`tools/m14-tests.js` section F threw.** It scattered "every truck" across a
+  hand-written list of three positions and asserted `3` three separate times. A fourth
+  appliance indexed past the end of the array. The counts now come from
+  `APPARATUS_DEFS.length`, and so does section G's ceiling on how many trucks can be out.
+- **The colour audit did not know the tanker existed.** `SIGNAL_GROUPS.apparatus-tint`
+  named its three colours as a literal, so a new signal colour shipped without a single
+  CIEDE2000 or CVD comparison against anything — and every assertion in that section still
+  passed, because the table names its own entries. `m10` D9b/D9c now count the group
+  against `APPARATUS_DEFS`, which is the guard that was missing. For the record the tint
+  is fine: worst pair engine/tanker at 40.9 dE00 under protanopia, against a threshold
+  of 11.
+
+### Test counts
+- `tools/m16-tests.js` — 53 assertions: the appliance and what it gives up, the shuttle
+  and its edges (a full engine takes nothing, an empty tanker gives nothing, driving away
+  stops it, it will not fill an ambulance), the nearest-truck hydrant fix, the three-call
+  shift, four trucks for four volunteers, and the two HUD chips below.
+- **1539 assertions** across 18 suites — m0 149 · m1 113 · m2 57 · m3 102 · m4 59 · m5 31 ·
+  m6 42 · m7 35 · m8 34 · m9 94 · m10 256 · m11 105 · m12 98 · m13 78 · m14 88 · m15 107 ·
+  m16 53 · boot-check 38.
+
 ## 2026-08-20 — a crew of four
 
 The GDD's player fantasy opens *"One to four players begin each shift at a small volunteer

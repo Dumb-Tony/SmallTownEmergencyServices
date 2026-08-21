@@ -68,7 +68,7 @@ export class Hud {
         <div class="card" id="titlecard">
           <h1>Small Town Emergency Services</h1>
           <p class="tagline">The town keeps going without you.</p>
-          <p class="body">You are the volunteer on duty. Three trucks, one clinic, and a
+          <p class="body">You are the volunteer on duty. Four trucks, one clinic, and a
              dispatcher who will keep calling whether or not the last job is finished.</p>
           <div class="keys">
             <div><b>WASD</b> move / drive</div>
@@ -335,6 +335,20 @@ export class Hud {
         bits.push(`<span class="chip patient">patient aboard ${v ? Math.round(v.condition * 100) : '?'}%</span>`);
       }
       if (ap.hydrantId) bits.push('<span class="chip good">on a hydrant</span>');
+      /* The shuttle, from both cabs. applyTankerSupply's own comment claimed "the HUD
+         reads this" for a whole milestone before the HUD did — and a tanker whose work is
+         invisible is a tanker nobody drives. The driver being fed needs to know water is
+         coming; the driver doing the feeding needs to know they are parked close enough. */
+      if (ap.suppliedBy) {
+        const from = s.apparatus.find((q) => q.id === ap.suppliedBy);
+        bits.push(`<span class="chip good">fed by ${from ? from.name : 'a tanker'}</span>`);
+      }
+      if (def.supplies) {
+        const to = s.apparatus.find((q) => q.suppliedBy === ap.id);
+        bits.push(to
+          ? `<span class="chip good">feeding ${to.name}</span>`
+          : '<span class="chip dim">nothing hooked up</span>');
+      }
       if (ap.damage > 0.1) bits.push(`<span class="chip bad">damage ${Math.round(ap.damage * 100)}%</span>`);
       if (ap.siren) bits.push('<span class="chip siren">SIREN</span>');
       // Who is actually driving matters the moment there are two of you in one cab.

@@ -69,10 +69,19 @@ export const STATION = {
   apron: { x: 68, y: 154, w: 50, h: 16 },
   spawn: { x: 94, y: 158 },
   rack:  { x: 120, y: 159 },     // spare kit left on the apron between calls
+  /* Four bays now, at 14 m rather than 16.
+   *
+   * ⚠ THE APRON RECTANGLE COULD NOT SIMPLY GET WIDER. `atStation` measures from it, and
+   * widening it east to fit a fourth bay put the Main Street junction 14 m from the
+   * rectangle — inside the 22 m tidy radius, so a truck abandoned at the junction would
+   * have counted as parked at the station. Tightening the spacing keeps all four on the
+   * forecourt that already exists; the appliances are 2.7 m wide at the widest, so 14 m
+   * between bays is still most of a truck's length of clear air either side. */
   bays: [
-    { apparatusId: 'engine',    x: 80,  y: 160, angle: -Math.PI / 2 },
-    { apparatusId: 'ambulance', x: 96,  y: 160, angle: -Math.PI / 2 },
-    { apparatusId: 'rescue',    x: 112, y: 160, angle: -Math.PI / 2 },
+    { apparatusId: 'engine',    x: 74,  y: 160, angle: -Math.PI / 2 },
+    { apparatusId: 'ambulance', x: 88,  y: 160, angle: -Math.PI / 2 },
+    { apparatusId: 'rescue',    x: 102, y: 160, angle: -Math.PI / 2 },
+    { apparatusId: 'tanker',    x: 116, y: 160, angle: -Math.PI / 2 },
   ],
 };
 

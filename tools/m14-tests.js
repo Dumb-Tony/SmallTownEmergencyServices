@@ -26,6 +26,7 @@ import {
   clearSave, loadTown, saveTown, defaultTown, migrate, advanceShift,
 } from '../src/core/persistence.js';
 import { STATION, BUILDING_BY_ID, dist, atStation } from '../src/data/town.js';
+import { APPARATUS_DEFS } from '../src/data/equipment.js';
 import { reportCard } from '../src/ui/hud.js';
 import { CrewBot } from './_crewbot.js';
 
@@ -375,26 +376,31 @@ emit('E done');
 
 function sectionF() {
 lines.push('--- F. the worst hand-over a shift can make is still a shift (GDD rule 9) ---');
-  const spots = [[320, 74], [300, 260], [180, 60]];
+  /* One abandoned spot per appliance. Derived from APPARATUS_DEFS rather than written
+     out as a literal count, because the fourth truck landing in m16 broke this section
+     three ways at once: spots[3] was undefined, and F1/F3/F6 all asserted "3". */
+  const spots = [[320, 74], [300, 260], [180, 60], [390, 200]];
+  const nTrucks = APPARATUS_DEFS.length;
   const { town, report } = bankWith((s) => {
     s.apparatus.forEach((ap, i) => {
-      ap.x = spots[i][0]; ap.y = spots[i][1]; ap.waterL = 0; ap.damage = 0.95;
+      const spot = spots[i % spots.length];
+      ap.x = spot[0]; ap.y = spot[1]; ap.waterL = 0; ap.damage = 0.95;
     });
     for (const t of s.tools) {
       if (t.carrier === 'rack') continue;
       t.carrier = null; t.x = 340; t.y = 80;
     }
   });
-  eq('F1 all three trucks are recorded as out', Object.keys(town.apparatus).length, 3);
+  eq('F1 every truck is recorded as out', Object.keys(town.apparatus).length, nTrucks);
   gt('F2 and the kit with them', Object.keys(town.tools).length, 5);
 
   /* The warning is the difference between a consequence and an ambush, so it is asserted
      as hard as the mechanic is. */
-  eq('F3 the report warned about every one of them', report.nextShift.apparatusOut.length, 3);
+  eq('F3 the report warned about every one of them', report.nextShift.apparatusOut.length, nTrucks);
   ok('F4 naming the place for each', report.nextShift.apparatusOut.every((a) => a.where && a.where.length > 3),
     JSON.stringify(report.nextShift.apparatusOut.map((a) => a.where)));
   gt('F5 and listed the kit', report.nextShift.toolsOut.length, 0);
-  eq('F6 and the damage', report.nextShift.damagedApparatus.length, 3);
+  eq('F6 and the damage', report.nextShift.damagedApparatus.length, nTrucks);
   const card = reportCard(report);
   ok('F7 the card renders it, because a number nobody sees is not a feature',
     /Still out:/.test(card) && /Left in the field:/.test(card) && /In the shop:/.test(card));
@@ -482,8 +488,8 @@ lines.push('--- G. six shifts of a crew that never puts anything away ---');
       `   (control: ${control[i].controlled} controlled, ${f(control[i].conf * 100, 0)}%)`);
   }
 
-  le('G1 there are only three trucks, so only three can ever be out',
-    Math.max(...rows.map((r) => r.ap)), 3);
+  le('G1 there are only as many trucks as the station has, so only that many can be out',
+    Math.max(...rows.map((r) => r.ap)), APPARATUS_DEFS.length);
   le('G2 and the kit list cannot grow past the kit', Math.max(...rows.map((r) => r.tools)), 12);
   le('G3 the save is still nowhere near the quota it could fill',
     Math.max(...rows.map((r) => r.bytes)), 4096);

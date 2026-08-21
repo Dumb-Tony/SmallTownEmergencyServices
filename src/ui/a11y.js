@@ -544,7 +544,11 @@ export const SIGNAL_GROUPS = Object.freeze([
   {
     id: 'apparatus-tint', where: 'which truck is which',
     src: 'equipment.js tint', carrier: 'colour+text',
-    colours: { engine: '#c0392b', ambulance: '#ecf0f1', rescue: '#e67e22' },
+    /* Every appliance, not the three that existed when this table was written. m16's
+       tanker was on the road for a full milestone before anybody noticed the colour
+       audit did not know about it — m10 D9b now asserts the count against
+       APPARATUS_DEFS so the fifth truck cannot repeat it. */
+    colours: { engine: '#c0392b', ambulance: '#ecf0f1', rescue: '#e67e22', tanker: '#2e86a8' },
   },
   {
     id: 'siren-bar', where: 'the lightbar on the cab roof',

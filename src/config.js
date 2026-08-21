@@ -95,6 +95,16 @@ export const CONFIG = {
     hoseMaxLengthM: 34,    // park badly and the fire is simply out of reach
     hydrantHookupM: 7.0,   // how close the engine must be spotted to a hydrant
     hydrantSupplyLps: 22,  // refill rate once hooked up
+
+    /* Tanker to engine. Deliberately slower than a hydrant — a hydrant is mains pressure
+       and this is a pump between two trucks — so a shuttle is a real round trip and not a
+       second hydrant that happens to be parked. At 14 L/s the tanker's 6000 L is seven
+       minutes of continuous transfer, or two and a half engine tanks, which is most of a
+       shift's worth of water for one structure fire. The reach is generous because
+       reversing a 8.4 m tanker up to a 7.6 m engine on a kerb is not the skill this is
+       about. */
+    tankerTransferLps: 14,
+    tankerTransferM: 9.0,
     // MEASURED: a burning cell gains fire.burnHeatGain (0.24) heat/sec. At 12 L/s the
     // nozzle removes 0.72 heat/sec from ONE cell, so a focused stream wins comfortably
     // and a stream spread across three cells (0.24 each) only just holds. That ratio is

@@ -34,8 +34,8 @@ export const CREW = Object.freeze([
   { id: 'r4', name: 'Volunteer 4', tint: '#bc7ca4', prefix: null },
 ]);
 
-/** Four hands is the fantasy; the station has three trucks and one clinic, so a fifth
- *  would be somebody with nothing of their own to drive. */
+/** Four hands is the fantasy, and since Tanker 1 there are four bays to match, so a
+ *  fifth would be somebody with nothing of their own to drive. */
 export const MAX_CREW = CREW.length;
 
 export const CREW_BY_ID = Object.freeze(

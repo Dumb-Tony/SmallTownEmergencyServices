@@ -309,8 +309,15 @@ function doUse(state, p, dtMs, out) {
       if (p.useProgressMs >= CONFIG.tools.wrenchTurnMs) {
         p.useProgressMs = 0;
         if (target._fixture === 'hydrant') {
-          const eng = state.apparatus.find((a) => state.apparatusDefs[a.defId].tankL > 0 &&
-            dist(a.x, a.y, target.x, target.y) <= CONFIG.water.hydrantHookupM);
+          /* ⚠ THE NEAREST TRUCK, NOT THE FIRST ONE IN THE LIST. `find` was correct while
+           * exactly one appliance carried water; with a tanker there are two, and turning
+           * the wrench beside the tanker would have charged the ENGINE parked across town
+           * — because the engine is earlier in APPARATUS_DEFS. The same shape as every
+           * other two-case rule that broke when a third case turned up. */
+          const eng = state.apparatus
+            .filter((a) => state.apparatusDefs[a.defId].tankL > 0 &&
+              dist(a.x, a.y, target.x, target.y) <= CONFIG.water.hydrantHookupM)
+            .sort((a, b) => dist(a.x, a.y, target.x, target.y) - dist(b.x, b.y, target.x, target.y))[0];
           if (eng) {
             eng.hydrantId = target.id;
             out.push({ type: 'HYDRANT_CHARGED', hydrantId: target.id, apparatusId: eng.id });
@@ -465,6 +472,57 @@ function applyWaterSupply(state, dtMs) {
     // Half-frozen mains in a cold snap; 1.0 in everything else.
     ap.waterL = Math.min(def.tankL, ap.waterL +
       CONFIG.water.hydrantSupplyLps * weatherFor(state).hydrantFlow * (dtMs / 1000));
+  }
+  applyTankerSupply(state, dtMs);
+}
+
+/**
+ * A tanker parked beside the engine feeds it.
+ *
+ * The whole reason the fourth appliance exists — though NOT for the reason I built it.
+ * m16 section D measured the claim I had written here first ("a barn fire is won on the
+ * tank you arrived with or not at all") and it is false: a crew that works the fire with
+ * a walking nozzle puts every structure in this town out on under 1500 L, and the engine
+ * carries 2500. No SINGLE call needs a tanker.
+ *
+ * A SHIFT does. Three structure fires at the far end of the valley and the engine is dry
+ * on the third, 33-57 m from the nearest hydrant, and the hookup radius is seven metres —
+ * so refilling means dropping the line, driving the truck out of the fire, charging a
+ * hydrant, filling and driving back. Measured: 114 seconds, during which the building
+ * burns unopposed and nine more points of it are lost. That is what this buys.
+ *
+ * It is deliberately SLOWER than a hydrant (a hydrant is mains pressure; this is a pump
+ * between two trucks) and it costs the tanker exactly what it gives, so the shuttle is a
+ * real round trip rather than a second hydrant that happens to be parked. No hose, no
+ * nozzle, no way for the tanker to put a drop on a fire by itself.
+ */
+function applyTankerSupply(state, dtMs) {
+  const W = CONFIG.water;
+  for (const src of state.apparatus) {
+    if (!state.apparatusDefs[src.defId].supplies || src.waterL <= 0) continue;
+    for (const dst of state.apparatus) {
+      if (dst === src) continue;
+      const dstDef = state.apparatusDefs[dst.defId];
+      // Only into something that can actually use it, and only if it has room.
+      if (!dstDef.hose || dst.waterL >= dstDef.tankL) continue;
+      if (dist(src.x, src.y, dst.x, dst.y) > W.tankerTransferM) continue;
+      const moved = Math.min(
+        W.tankerTransferLps * (dtMs / 1000),
+        src.waterL,
+        dstDef.tankL - dst.waterL);
+      src.waterL -= moved;
+      dst.waterL += moved;
+      dst.suppliedBy = src.id;
+      break;                       // one truck feeds one truck: a pump has one outlet
+    }
+  }
+  // Nobody is being fed unless they were fed THIS step — the HUD reads this, and a stale
+  // flag is a player told they have water coming when the tanker drove off.
+  for (const ap of state.apparatus) {
+    if (ap.suppliedBy && !state.apparatus.some((q) => q.id === ap.suppliedBy &&
+        dist(q.x, q.y, ap.x, ap.y) <= W.tankerTransferM && q.waterL > 0)) {
+      ap.suppliedBy = null;
+    }
   }
 }
 

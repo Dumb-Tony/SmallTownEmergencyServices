@@ -32,6 +32,29 @@ export const APPARATUS_DEFS = [
     loadout: ['chainsaw', 'spreaders', 'hotstick', 'gasmeter', 'extinguisher'],
     blurb: 'Saw, spreaders, hot stick, gas meter. No water, no stretcher.',
   },
+  /* The fourth appliance, and it exists because of a MEASUREMENT.
+   *
+   * A crew of four closed exactly as many calls as a crew of two (tools\m15-tests.js
+   * section G): all four were on their feet and walked three kilometres each, and there
+   * was simply nothing for the third and fourth pair of hands to drive. The GDD files the
+   * answer under long-term progression — "additional apparatus BROADENS capability instead
+   * of providing percentage upgrades" — so this is not a better engine.
+   *
+   * It is water where there is no hydrant. Six thousand litres, no hose of its own, and
+   * it can pass water to the engine parked beside it: the whole point is that the engine
+   * no longer has to be spotted within seven metres of a kerbside hydrant to keep
+   * fighting. Miller Barn is 40 m from the nearest one. That turns "which hydrant do I
+   * reach" into a shuttle somebody has to run, which is a job for a person rather than a
+   * statistic — and it costs, because six tonnes of water is the slowest thing in the
+   * station and the tanker cannot put any of it on a fire itself. */
+  {
+    id: 'tanker', name: 'Tanker 1', short: 'TNK', tint: '#2e86a8',
+    lengthM: 8.4, widthM: 2.7,
+    maxSpeed: 14, accel: 3.6, reverseSpeed: 5, brake: 10, grip: 0.78,
+    tankL: 6000, hose: false, patientBay: false, supplies: true,
+    loadout: ['wrench'],
+    blurb: 'Six thousand litres and a hydrant wrench. No hose — it feeds the engine.',
+  },
 ];
 
 export const APPARATUS_BY_ID = Object.freeze(Object.fromEntries(APPARATUS_DEFS.map((a) => [a.id, a])));

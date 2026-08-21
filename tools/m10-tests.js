@@ -22,6 +22,7 @@ import {
   FLASH_THRESHOLD_HZ, flashHazards, FONT_SIZES, isPhoneLayout, resolvedPx, textSizes,
   smallestText, textSizeFailures, TEXT_FLOOR_PX,
 } from '../src/ui/a11y.js';
+import { APPARATUS_DEFS } from '../src/data/equipment.js';
 
 /* ── harness ─────────────────────────────────────────────────────────────── */
 const lines = [];
@@ -210,7 +211,17 @@ lines.push('--- D. the signal pairs ---');
   ok('D8b all four of them, which is six pairs and not one',
     ['you/partner', 'you/vol3', 'you/vol4', 'partner/vol3', 'partner/vol4', 'vol3/vol4']
       .every((p) => !!find('crew-tint', p.split('/')[0], p.split('/')[1])));
-  ok('D9 the three trucks are checked', !!find('apparatus-tint', 'engine', 'rescue'));
+  ok('D9 the trucks are checked', !!find('apparatus-tint', 'engine', 'rescue'));
+  /* ⚠ A NEW SIGNAL COLOUR THAT THE AUDIT DOES NOT KNOW ABOUT IS AN UNAUDITED SIGNAL
+     COLOUR. The tanker shipped with a tint no pair in this table had ever been compared
+     against, and every assertion here still passed, because the table names its own
+     entries. Count against the source of truth instead. */
+  const apGroup = SIGNAL_GROUPS.find((g) => g.id === 'apparatus-tint');
+  eq('D9b every appliance in the station is in it, not just the ones that existed then',
+    Object.keys(apGroup.colours).length, APPARATUS_DEFS.length);
+  ok('D9c and each one by its own id',
+    APPARATUS_DEFS.every((d) => apGroup.colours[d.id] === d.tint),
+    JSON.stringify(APPARATUS_DEFS.filter((d) => apGroup.colours[d.id] !== d.tint).map((d) => d.id)));
 
   lines.push('      group                pair                     dE00  prot  deut  trit  lum   verdict');
   for (const r of rows) {

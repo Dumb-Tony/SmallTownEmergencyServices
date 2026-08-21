@@ -276,11 +276,11 @@ Do not build yet:
 
 ### Current prototype status
 
-*(Last revised 2026-08-20. The paragraph below described the first build and had gone
+*(Last revised 2026-08-21. The paragraph below described the first build and had gone
 several milestones out of date; what follows is what is actually in the tree.)*
 
 **Phases 0–5 are complete.** One continuous town rendered in a three-quarter view over a
-flat simulation, keyboard and touch movement, three drivable apparatus with
+flat simulation, keyboard and touch movement, four drivable apparatus with
 non-overlapping loadouts, tool retrieval constraints, five timed incident families across
 eleven templates, simultaneous dispatch, staged crash response, worsening priority, a
 road-blocking tree, and cross-shift consequences the player is shown by name at the moment
@@ -292,9 +292,12 @@ Beyond the MVP scope, and in each case because a prior gate exposed the gap:
   than a typed code — and now a crew of **up to four**, which is the "one to four players"
   this document opens with. Two share a keyboard because there is one keyboard; the other
   two arrive over the wire, each with a seat that is held (and a token that reclaims it)
-  if their connection drops. Measured, four hands do not currently close more calls than
-  two: the bottleneck is three trucks and one dispatch queue, which is precisely what
-  "larger station and more bays" below is for;
+  if their connection drops. Measured, four hands did not close more calls than two — the
+  bottleneck was three trucks and one dispatch queue — which is what **Tanker 1** and a
+  fourth bay came out of: a fourth capability rather than a better engine, exactly as
+  "additional apparatus broadens capability instead of providing percentage upgrades"
+  above asks for. It carries 6000 L and no hose, so it can only feed the engine. Measured,
+  it is worth nothing on a single call and 114 seconds on the third one of a shift;
 - **a synthesised audio layer** whose mix is a pure function of state;
 - **residents** — the GDD's `NPCs` core system. Every building has people in it who get
   themselves out of a burning one faster than the crew can cross town, so what the player

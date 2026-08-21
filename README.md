@@ -104,8 +104,8 @@ saying out loud.) There is no server: it is a direct WebRTC connection, with a p
 broker used only to introduce the two browsers.
 
 **Three of them can join over the internet**, for a crew of four — the GDD's "one to four
-players", and about as many hands as three trucks and one clinic can usefully occupy. A
-fifth is turned away and told why.
+players", and — since Tanker 1 — one pair of hands per truck. A fifth is turned away
+and told why.
 
 The host's town is the game. A client sends what its keys are doing and draws what comes
 back, and never steps a simulation of its own — so you cannot end up disagreeing about
@@ -126,11 +126,14 @@ or what they are holding.
 
 ## What is in the town
 
-Three apparatus, and they are not interchangeable:
+Four apparatus, and they are not interchangeable:
 
 - **Engine 1** — 2500 L, a 34 m hose line, hydrant wrench, extinguisher. Slow. **No medical kit.**
 - **Medic 1** — the medical kit, and the only vehicle that can take anyone to the clinic. No rescue gear.
 - **Rescue 1** — chainsaw, hydraulic spreaders, insulated hot stick, gas meter. No water.
+- **Tanker 1** — 6000 L and a hydrant wrench. **No hose**, so it cannot put a drop on a
+  fire itself; it parks beside the engine and feeds it at 14 L/s. The slowest thing in the
+  station, the slowest to get going, the worst at stopping, and the biggest on the road.
 
 Eleven named buildings, four through-routes each way, eleven hydrants, eight poles,
 one clinic. Five incident families (fire, crash, tree, medical, utility) across eleven
@@ -286,6 +289,14 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   geometry, persistence, loadouts, movement, live frames, determinism. Section H2 greps
   every source file for `Math.random`, which `src/core/rng.js` claimed for months without
   anything behind it — and that is exactly how the audio layer came to be built on one.
+- `tools/m16-tests.js` — Tanker 1, and the three wrong reasons I built it. Section D is
+  the most useful thing in the suite: version one fought a barn fire the instant it lit and
+  got byte-identical results with the truck and without; version two assumed the fire just
+  needed a head start and measured water demand going *down* as it grew; version three
+  blamed the building and only proved that a stream poured from one parked spot reaches a
+  fraction of a big shed. What it measures now is a three-call shift, and the claim it pins
+  down is the uncomfortable one — **no single fire in this town needs more than one tank.**
+  What needs a tanker is the third call.
 - `tools/m15-tests.js` — a crew of four. Mostly about the four places a two-case rule was quietly wrong at three: the P key signing off somebody on another continent, three clients all driving one body, a third seat reading the first seat's keys, and a snapshot decoder that painted anybody who was not `r2` in the host's own colour. Its crew-size comparison asserts that crew size changes the shift AT ALL, because the first version of it measured one bot three times and every assertion passed.
 - `tools/m14-tests.js` — the station between shifts. What a truck's damage, position and
   tank carry over, what gets collected and when, and the line between a consequence and an
@@ -362,8 +373,9 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**1481 assertions** — m0 146 · m1 113 · m2 57 · m3 102 · m4 59 · m5 31 · m6 42 · m7 35 ·
-m8 34 · m9 94 · m10 254 · m11 105 · m12 98 · m13 78 · m14 88 · m15 107 · boot-check 38.
+**1539 assertions** — m0 149 · m1 113 · m2 57 · m3 102 · m4 59 · m5 31 · m6 42 · m7 35 ·
+m8 34 · m9 94 · m10 256 · m11 105 · m12 98 · m13 78 · m14 88 · m15 107 · m16 53 ·
+boot-check 38.
 
 Suites emit progressively, so a hang still reports how far it got.
 

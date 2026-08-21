@@ -263,11 +263,24 @@ function sectionG() {
 lines.push('--- G. initial state (apparatus determine capability) ---');
 {
   const s = createInitialState({ seed: 1, seedLabel: 't', town: defaultTown() });
-  eq('G1 three apparatus', s.apparatus.length, 3);
-  ok('G2 all three start in their bays', s.apparatus.every((a) =>
+  eq('G1 four apparatus', s.apparatus.length, 4);
+  ok('G2 all four start in their bays', s.apparatus.every((a) =>
     STATION.bays.some((b) => b.apparatusId === a.id && b.x === a.x && b.y === a.y)));
+  ok('G2b and no two share one', new Set(STATION.bays.map((b) => `${b.x},${b.y}`)).size,
+    STATION.bays.length);
   ok('G3 the engine carries water', s.apparatus.find((a) => a.id === 'engine').waterL > 0);
-  ok('G4 nothing else does', s.apparatus.filter((a) => a.id !== 'engine').every((a) => a.waterL === 0));
+  /* Two trucks carry water now, and they are not interchangeable: the engine has the hose
+     and the tanker has the volume. "Nothing else does" was true of a three-truck station
+     and is the wrong claim for a four-truck one — what still has to be true is that the
+     ambulance and the rescue truck carry none. */
+  ok('G4 so does the tanker, and a great deal more of it',
+    s.apparatus.find((a) => a.id === 'tanker').waterL >
+    s.apparatus.find((a) => a.id === 'engine').waterL);
+  ok('G4b but the ambulance and the rescue truck still carry none',
+    s.apparatus.filter((a) => a.id === 'ambulance' || a.id === 'rescue')
+      .every((a) => a.waterL === 0));
+  ok('G4c and the tanker cannot put any of it on a fire — no hose',
+    !s.apparatusDefs.tanker.hose && !s.tools.some((t) => t.carrier === 'tanker' && t.defId === 'hose'));
 
   const onEngine = s.tools.filter((t) => t.carrier === 'engine').map((t) => t.defId).sort();
   const onAmb = s.tools.filter((t) => t.carrier === 'ambulance').map((t) => t.defId).sort();
