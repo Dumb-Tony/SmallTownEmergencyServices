@@ -1,5 +1,190 @@
 # Changelog
 
+## 2026-08-20 — the town has people in it
+
+"The town keeps going without you" has meant calls arriving and fires spreading on their
+own clock. It has never meant anybody being there. Eleven buildings that only ever
+contain a hazard are scenery with a name, and a town with nobody in it cannot be let
+down. `src/sim/residents.js` — the GDD's `NPCs: health, panic, mobility,
+self-preservation, bad decisions, loose memory` — does three things and nothing else.
+
+**They get themselves out.** A household leaves a burning building by the door, on its
+own, usually before the crew arrives — the mean building is clear at 16.5 s against the
+~25 s it takes to cross town in the engine. This is the load-bearing one: it is why the
+player is not obliged to search every structure, and it is what turns an ABSENCE into
+information. The radio says it twice per building and no more — *"Somebody is out of
+Pinecrest Apartments — they say there are 3 more people inside"*, and then *"That is
+everybody out"* — and the call card carries the same count while it matters.
+
+**Some don't.** Nerve and mobility are drawn per person from the shift seed, so the town
+decides and not a coin flip at the moment it matters. Someone who runs out of time
+becomes a casualty of that incident, inside, with the condition their time in the smoke
+bought them — the same object shape as every other patient, so nothing downstream can
+tell where they came from. **Measured over 52 people on four seeds: 3 did not get out
+(5.8%), never more than one from a household.** That number is a distribution and the
+suite asserts its shape rather than the figure.
+
+Two measurements moved it there, and both were the model being wrong rather than a
+number being wrong:
+
+- **The hesitation was free.** Exposure only started when somebody began moving, so the
+  seven seconds spent deciding it is really a fire were seven seconds the fire did not
+  get. Nobody was EVER trapped — 0 of 52, on every seed, in every building.
+- **`heatAt` reaches 9 m**, so in Pinecrest Apartments — 46 m by 36 m — a person at the
+  far end of a fully involved building was in clear air by the model. Exposure now
+  carries a whole-building involvement term, because smoke does not care which room you
+  are in.
+- And the hesitation turned out to be the whole distribution. At the first setting the
+  spread of time-spent-inside across a population was 14.4 s to 16.7 s — so tight that
+  the collapse limit trapped 34.6% of the town at one value and nobody at the next. A
+  slower walker also spends their extra seconds further from the fire, at a lower
+  exposure rate, so mobility very nearly cancels itself out.
+
+**They watch, and the siren is what moves them.**
+`CONFIG.drive.sirenClearRadiusM` has read *"traffic and pedestrians yield inside this"*
+since the first commit, with no pedestrians anywhere in the build. A working call now
+draws the neighbourhood, they stand on the ROAD side — where the crew comes from, and
+where people actually stand — and walking through them costs a responder about a quarter
+of their speed, bottoming out at a floor so a crowd is always friction and never a wall.
+Two more things were wrong on the way here: an even ring of five people 11 m out leaves
+13 m between neighbours and the player simply walks between them, and nobody came out to
+look at all — the only people who ever saw a fire were the ones already outdoors when it
+started, so a "crowd" was a coincidence that took ninety seconds to assemble.
+
+Steering is `_drift`, copied from `ContainmentDetailWeb\src\sim\anomaly.js` with both of
+its scars: probe further than one step, and release the wall on a longer probe than you
+took it on.
+
+On the wire, residents are a tuple of indices: the obvious version — an object per person
+with the state and home as strings and a facing angle nothing draws — measured at 78 bytes
+a head and **35% of the whole snapshot**. It is 28 bytes and 15% now, and the snapshot
+went 4242 B → 3247 B. `PROTOCOL_VERSION` is 2.
+
+Whole-town cost: **0.0196 ms a step**, 19 residents, no allocation growth.
+
+`tools/m12-tests.js` — 90 assertions, including the ones that keep them out of the game:
+residents create no calls, drive nothing, hold no tools, cannot join the crew, and cannot
+keep a call from closing. `tools/_residentdiag.js` is the run behind every number above.
+
+
+## 2026-08-20 — three audits: sound, sight, and a long session
+
+Three read-only audits run against a build at 618 green assertions, each asked for
+DEFECTS rather than a summary. All three found live bugs, which is the point: a suite
+proves what somebody thought to assert.
+
+### Sound — `tools/m9-tests.js`, 94 assertions
+
+- **The audio layer called `Math.random`** for its noise bed. `src/core/rng.js` has
+  claimed since the first commit that a grep test forbids exactly this, and no such test
+  existed — which is how the bug survived. The claim is now true: m0 section H2 scans 23
+  source files, with one documented exception (`net.js` `randCode` — an unpredictable
+  room code is the point) and a comment stripper, because two of the three files that
+  tripped it were merely *naming* the call while forbidding it.
+- **The cue vocabulary drifts in the direction nobody checks.** m0 J19 asserted every cue
+  names a real event; twelve events had been added since, including the whole medical
+  chain, and nothing asserted the other direction. "Deliberately silent" is now something
+  you write down (`SILENT_EVENTS`) rather than something you forget.
+- **The rate limit was broken across shifts.** `lastCueAt` is stamped in simulation time,
+  and a new shift restarts simulation time at zero while the table still holds stamps
+  from the last one. A stamp ten minutes in the future reads as "the gap has not passed",
+  so a cue that last fired late in shift one stayed silent for that long into shift two.
+
+### Sight — `tools/m10-tests.js`, 226 assertions
+
+A colour audit that computes rather than eyeballs: WCAG contrast, CIEDE2000 distance, and
+protanopia/deuteranopia/tritanopia simulation, against the palettes actually in the files.
+
+- **Eight signal pairs were indistinguishable under a simulated deficiency** — including
+  a routine call against a high one, and a stable casualty against a dying one. Zero are
+  now, and the ones that could not be fixed by colour are carried by more than colour:
+  a casualty's condition is a DASH PATTERN as well as a hue, so the ring still says which
+  patient this is in greyscale.
+- **Seventeen of 57 text pairs were below AA.** One of 55 was, and then none.
+- **The stun ring flashed at 4.46 Hz**, over the WCAG 2.3.1 three-flash threshold —
+  the only animation in the game that was. Nothing exceeds it now, and every animation
+  reads a scalar so `prefers-reduced-motion` damps it. Three that were declared and never
+  read — drifting smoke, rising embers, a wobbling firelight pool — kept moving at full
+  strength for a player who had asked for less.
+- **The smallest text on a phone was 8.2 px.** It is 9 px, and the smallest thing is a
+  canvas label rather than an accident of which unit somebody reached for.
+- And one divergence is pinned rather than fixed: `--bad` was lightened to rescue a
+  2.90:1 chip label, which cost that colour its separation — so the confidence bar keeps
+  the darker red, because a chip is text ON the colour and a bar is a block of it with
+  the word beside it. `hud.js` says why, and D25e asserts it still says why.
+
+### A long session — `tools/m11-tests.js`, 105 assertions
+
+Six shifts without a reload, an hour with the lid shut, two thousand jabs at ESC, and a
+browser that will not hand out a `localStorage`.
+
+- **The town could only ever get worse.** A gutted building was boarded for
+  `repairShifts` — except boarding was re-set every shift the damage was still high, and
+  damage was never allowed to fall while boarded. A fixed point. Measured over twelve
+  unattended shifts: seven buildings boarded by shift four, all seven still boarded on
+  shift thirteen, and the sites available for a structure fire stuck at three of ten.
+- **A struck hydrant was never repaired**, because `sanitiseHydrants` rebuilt every record
+  as `{ damaged }` and dropped `shiftsDown` on every load, so the repair arm was
+  unreachable through a real save.
+- **An unattended fire stopped being able to spread at the moment it got worst.** The
+  exposure jump was gated on the call still being open, so a structure fire nobody
+  attended reached danger 1.0, was declared lost, and from then on every jump was
+  silently dropped. Measured on one seed: call open, one attempt, the barn catches; call
+  lost, seven attempts, nothing ever catches — while the farmhouse burned to 100% either
+  way.
+- **A malformed network message took the host's whole shift with it.** `{t:'cmd'}` with
+  no fields threw straight out of the handler; commands were never version-checked, only
+  the hello was, so a peer that had been refused could still drive a responder.
+- **Thirteen steps of world ran after the bell.** `frame()` guards the mode but the
+  clock's accumulator does not, and a 250 ms frame straddling the end of a shift
+  simulated past the report — in one, a casualty died, so the report said "0 lost" over
+  a state that said 1.
+
+
+## 2026-08-20 — a frame a phone can afford: 8.1 ms → 0.64 ms
+
+The three-quarter view arrived as geometry, not as a budget. Measured by wrapping the
+renderer's own methods, `drawApparatus` was **3.26 ms of a 4.33 ms frame — 75%** — for
+three trucks. Not polygon volume: per-call overhead.
+
+- **Wheels were four extruded prisms per truck**, twenty filled and stroked polygons
+  each, for a shape 1 m by 0.4 m half hidden under the body. Flat quads now, and they
+  read identically at every zoom the game uses. `drawApparatus` 3.26 ms → **0.09 ms**.
+- **`shade()` re-parsed a colour string for every face of every prism on every frame**,
+  with the same handful of pairs each time. Cached.
+- **Nothing was culled.** At phone zoom — 60 m across a 420 m town — ten buildings were
+  being extruded, windowed and lit for nothing, every frame. Props outside the visible
+  rectangle are skipped now, with a generous upward margin because a building in this
+  projection draws well above where it stands and its smoke goes higher still.
+
+Phone driving **8.12 → 0.64 ms** a frame, 62 props → 26, 488 filled polygons → 212. The
+town screenshot is pixel-identical.
+
+`tools/m4-tests.js` section F — seven assertions, including the failure that actually
+matters: that nothing inside the frame, or just off the top edge where it still draws
+down into view, is ever culled.
+
+
+## 2026-08-20 — a link worth pasting, and a report that hands the town over
+
+Two things the project's own premise depends on.
+
+- **The shared URL previewed as a bare domain**: no title, no description, no picture,
+  blank favicon. It has Open Graph and Twitter card tags now, and a real 1200×630
+  screenshot generated by `tools/_shot-og.js` — never a mock-up — plus an inline SVG
+  favicon that keeps the no-extra-requests property. The boot check asserts the image URL
+  is **absolute**, because a relative one previews as nothing at all.
+- **The shift report used to end on the sentence "damage and broken hydrants carry into
+  the next shift"** — a promise with nothing behind it. Phase 4's gate is that a player
+  cares about a previous mistake, and a mistake nobody is shown is a mistake nobody can
+  care about. The card now names what shift N+1 inherits: which buildings are boarded and
+  for how many more shifts, which are still being patched up, how many hydrants are out,
+  and the last few headlines underneath.
+
+`tools/m8-tests.js` section E — 12 assertions on the data **and** on the rendered card,
+because a block that computes correctly and renders nothing is not a feature.
+
+
 ## 2026-08-20 — the town you come back to
 
 GDD Phase 4's gate is "players care about a previous mistake", which needs the town to

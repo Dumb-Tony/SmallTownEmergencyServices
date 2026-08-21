@@ -128,6 +128,32 @@ Things that are *systems*, not scripts, and therefore chain into each other:
 - a trunk across the lane genuinely blocks the lane, so the shortest route stops being the shortest route;
 - flattening a hydrant with the engine puts it out of service — this shift and the next.
 
+## And people live here
+
+![A household out on the street and the neighbours come to look, while the pizzeria burns](docs/m12-residents.png)
+
+Every building has somebody in it. They are not quest-givers, they cannot be talked to,
+and they own nothing — they just live there, and they act whether or not anybody responds.
+
+**They get themselves out.** Most of a burning building's occupants leave by the door on
+their own, usually before you arrive: the mean building is clear in about 16 seconds, and
+crossing town in the engine takes 25. That is deliberate. It means you are not obliged to
+search every structure, and it turns an ABSENCE into information — *"Somebody is out of
+Pinecrest Apartments — they say there are 3 more people inside."*
+
+**Some of them don't.** How long somebody stands there deciding it is really a fire, and
+how fast they move once they have, are drawn per person when the shift starts. About one
+person in seventeen does not get out, never more than one from a household. They are a
+casualty then, inside, with the condition their time in the smoke bought them — and the
+count on the call card is the reason you go in.
+
+**They come out to watch, too.** A working call draws the neighbourhood, and people stand
+on the street, which is exactly where you want to walk. Pushing through a crowd costs you
+about a quarter of your speed. `Q` is what moves them.
+
+Nothing they do can create a call, keep one from closing, or take a decision away from
+you. A crowd is friction, never a wall.
+
 ## Sound
 
 WebAudio, synthesised from nothing — no files, no fetches. `tone`, `makeNoise` and
@@ -212,7 +238,31 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
 ```
 
 - `tools/m0-tests.js` — skeleton and design locks: RNG, clock, bus, controls, town
-  geometry, persistence, loadouts, movement, live frames, determinism.
+  geometry, persistence, loadouts, movement, live frames, determinism. Section H2 greps
+  every source file for `Math.random`, which `src/core/rng.js` claimed for months without
+  anything behind it — and that is exactly how the audio layer came to be built on one.
+- `tools/m12-tests.js` — the people who live here. That a household gets itself out
+  before the crew arrives, that the ones who don't become findable casualties rather than
+  statistics, that a crowd is friction and the siren clears it — and, mostly, that none of
+  it can touch the game: residents create no calls, drive nothing, hold no tools, and
+  cannot keep a call from closing. `tools/_residentdiag.js` is the run behind every tuned
+  number in `CONFIG.residents`, including the two model errors that made it impossible for
+  anyone to ever be trapped.
+- `tools/m11-tests.js` — robustness. Six shifts without a reload, an hour with the lid
+  shut, two thousand jabs at ESC, seven shapes of corrupt save, and a browser that refuses
+  to hand out a `localStorage`. It found a town that could only ever get worse, a hydrant
+  repair that no real save could reach, and a fire that stopped being able to spread at
+  the moment it got worst. `tools/_soakdiag.js` is the measurement.
+- `tools/m10-tests.js` — the colour audit, computed rather than eyeballed: WCAG contrast,
+  CIEDE2000 distance and three colour-vision simulations against the palettes actually in
+  the files. Eight signal pairs were indistinguishable to somebody with a common
+  deficiency and seventeen text pairs were below AA; none are. It also measures every
+  animation in flashes per second, which is how the stun ring turned out to be over the
+  WCAG 2.3.1 threshold.
+- `tools/m9-tests.js` — the audio layer held down: that every event the game emits is
+  either cued or written down as deliberately silent, that the cue rate limit survives a
+  new shift restarting the clock, and that a whole bot shift with audio running every
+  frame is byte-identical to the same shift played in silence.
 - `tools/m1-tests.js` — the systems: fire spread and suppression, water supply, gas
   ignition chains, live lines, blockage, patients, dispatch pacing, incident lifecycle,
   and the GDD's signature-scenario acceptance test.
@@ -254,7 +304,8 @@ powershell -ExecutionPolicy Bypass -File tools\smoketest.ps1 -Tests tools\m0-tes
   same seed — a crew that turns up must close more calls, lose fewer, and let less of
   the town burn than a crew that never leaves the station. It found nine bugs.
 
-**618 assertions.**
+**1169 assertions** — m0 146 · m1 113 · m2 57 · m3 99 · m4 59 · m5 31 · m6 42 · m7 35 ·
+m8 34 · m9 94 · m10 226 · m11 105 · m12 90 · boot-check 38.
 
 Suites emit progressively, so a hang still reports how far it got.
 

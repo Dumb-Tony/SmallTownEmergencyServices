@@ -23,6 +23,7 @@
  */
 
 import { CONFIG } from '../config.js';
+import { mulberry32 } from '../core/rng.js';
 import { dist } from '../data/town.js';
 import { gasAt } from '../sim/hazards.js';
 
@@ -44,17 +45,33 @@ export const RANGE = Object.freeze({
   wreck: 60,
 });
 
+/* How long a hold action takes, read straight out of CONFIG so the two cannot drift
+ * apart. The groan rises toward the finish instead of droning at one pitch, because
+ * that is the only feedback there is that leaning on SPACE is achieving anything:
+ * measured before this existed, extrication was 9.0 s, a hot stick 4.2 s and a hydrant
+ * wrench 2.6 s of complete silence. The medkit is deliberately absent — a dressing has
+ * no motor — and the chainsaw has a voice of its own. */
+export const WORK_MS = Object.freeze({
+  spreaders: CONFIG.medical.extricateMs,
+  hotstick: CONFIG.tools.hotstickMs,
+  wrench: CONFIG.tools.wrenchTurnMs,
+});
+
+const EMPTY = Object.freeze([]);
+
 /**
  * What should be audible right now, and how loudly.
  * @param {object} state  the simulation state, read-only
  * @returns {{siren:number, fire:number, water:number, saw:number, arc:number,
- *            engine:{gain:number, pitch:number}, gasRate:number}}
+ *            engine:{gain:number, pitch:number}, work:{gain:number, pitch:number},
+ *            gasRate:number}}
  */
 export function mixFor(state) {
   const crew = state.responders && state.responders.length ? state.responders : [state.player];
   const mix = {
     siren: 0, fire: 0, water: 0, saw: 0, arc: 0,
     engine: { gain: 0, pitch: 0 },
+    work: { gain: 0, pitch: 0 },
     gasRate: 0,
   };
   if (!crew[0]) return mix;
@@ -69,7 +86,7 @@ export function mixFor(state) {
     return d;
   };
 
-  for (const ap of state.apparatus) {
+  for (const ap of state.apparatus || EMPTY) {
     if (!ap.siren) continue;
     mix.siren = Math.max(mix.siren, atten(near(ap.x, ap.y), RANGE.siren));
   }
@@ -78,7 +95,7 @@ export function mixFor(state) {
   // fire far away and a small one at your feet can land on the same number, which is
   // correct — that is what they sound like.
   let fire = 0;
-  for (const h of state.hazards) {
+  for (const h of state.hazards || EMPTY) {
     if (h.kind === 'fire') {
       for (const c of h.cells) {
         if (!c.burning) continue;
@@ -87,14 +104,22 @@ export function mixFor(state) {
     } else if (h.kind === 'wreck' && h.burning) {
       fire += 0.45 * atten(near(h.x, h.y), RANGE.wreck);
     } else if (h.kind === 'power' && h.live) {
-      mix.arc = Math.max(mix.arc, atten(near(h.x, h.y), RANGE.arc));
+      /* The crackle carries as far as the fault does. Water on the ground grows the
+       * live zone from 6.5 m to 12.4 m (CONFIG.power.wetSpreadMul 1.9) and a fixed
+       * range meant the warning did not grow with the danger — you could stand inside
+       * a wet zone and hear exactly what you heard safely outside a dry one. Scaling
+       * the range by the zone's own radius is an exact identity at the boundary:
+       * atten(r, 30r/6.5) is (1 - 6.5/30)^2 = 0.613 whatever r is, so "this is as loud
+       * as the edge of a live zone sounds" stays one learnable number. */
+      const reach = RANGE.arc * ((h.radiusM || CONFIG.power.liveRadiusM) / CONFIG.power.liveRadiusM);
+      mix.arc = Math.max(mix.arc, atten(near(h.x, h.y), reach));
     }
   }
   mix.fire = Math.min(1, fire);
 
   // Anything in anyone's hands. Two crew both cutting is still one saw in your ears.
   for (const r of crew) {
-    const held = state.tools.find((t) => t.carrier === r.id);
+    const held = (state.tools || EMPTY).find((t) => t.carrier === r.id);
     if (!held) continue;
     if (held.flowing) mix.water = Math.max(mix.water, held.defId === 'hose' ? 1 : 0.55);
     if (held.defId === 'chainsaw') {
@@ -106,13 +131,27 @@ export function mixFor(state) {
       // all, so this is a gameplay signal, not decoration.
       mix.gasRate = Math.max(mix.gasRate, Math.min(14, gasAt(state, r.x, r.y) * 14));
     }
+    // A powered tool under load. Pitch follows how far into the action this responder
+    // is, so a nine-second extrication stops being nine seconds of nothing happening.
+    const workMs = WORK_MS[held.defId];
+    if (workMs && r.useProgressMs > 0) {
+      const frac = Math.min(1, r.useProgressMs / workMs);
+      const pitch = 1 + frac * 0.6;
+      if (pitch > mix.work.pitch) mix.work = { gain: 1, pitch };
+    }
   }
 
   for (const r of crew) {
     if (!r.inVehicleId) continue;
-    const ap = state.apparatus.find((a) => a.id === r.inVehicleId);
+    const ap = (state.apparatus || EMPTY).find((a) => a.id === r.inVehicleId);
     if (!ap) continue;
-    const def = state.apparatusDefs[ap.defId];
+    /* An apparatus this build has no def for is reachable input, not a hypothetical:
+     * a client rebuilds state.apparatus straight out of a peer's snapshot
+     * (src/net/protocol.js applySnapshot) and rooms are not private. main.js re-arms
+     * requestAnimationFrame on the LAST line of frame() with audio.update() above it,
+     * so anything thrown in here does not mean silence, it means a frozen game. */
+    const def = state.apparatusDefs && state.apparatusDefs[ap.defId];
+    if (!def) continue;
     const frac = Math.min(1, Math.abs(ap.speed) / (def.maxSpeed || 1));
     const gain = 0.35 + frac * 0.65;
     if (gain > mix.engine.gain) mix.engine = { gain, pitch: 0.6 + frac * 1.9 };
@@ -129,6 +168,7 @@ export function mixFor(state) {
  * `[freq0, freq1, seconds, type, gain, delay]` per partial.
  */
 export const CUES = Object.freeze({
+  SIM_RESET:           { bus: 'ui',    minGapMs: 1000, parts: [[392, 392, 0.18, 'sine', 0.20], [523, 523, 0.28, 'sine', 0.18, 0.15]] },
   CALL_RECEIVED:       { bus: 'ui',    minGapMs: 200, parts: [[740, 740, 0.16, 'square', 0.30], [988, 988, 0.22, 'square', 0.30, 0.17]] },
   CALL_UPDATED:        { bus: 'ui',    minGapMs: 400, parts: [[620, 700, 0.10, 'square', 0.16]] },
   PRIORITY_RAISED:     { bus: 'ui',    minGapMs: 400, parts: [[700, 940, 0.13, 'square', 0.22], [940, 1120, 0.11, 'square', 0.18, 0.12]] },
@@ -143,7 +183,16 @@ export const CUES = Object.freeze({
   PATIENT_TREATED:     { bus: 'foley', minGapMs: 300, parts: [[880, 1170, 0.12, 'sine', 0.18]] },
   PATIENT_EXTRICATED:  { bus: 'foley', minGapMs: 300, parts: [[300, 520, 0.22, 'triangle', 0.24]] },
   PATIENT_GRABBED:     { bus: 'foley', minGapMs: 200, parts: [[190, 150, 0.12, 'triangle', 0.16]] },
+  PATIENT_RELEASED:    { bus: 'foley', minGapMs: 200, parts: [[165, 118, 0.16, 'triangle', 0.14]] },
   PATIENT_LOADED:      { bus: 'foley', minGapMs: 200, parts: [[240, 320, 0.16, 'triangle', 0.20]] },
+  // Somebody walking out of a building that is on fire is the loudest fact on the
+  // board and there is nothing on screen that says it: they appear at a door the crew
+  // may not be looking at. Once per occupant — victims.js latches `fleeing`.
+  OCCUPANT_EVACUATING: { bus: 'world', minGapMs: 600, parts: [[660, 880, 0.14, 'sine', 0.20], [880, 660, 0.20, 'sine', 0.15, 0.13]] },
+  /* Somebody who did not get out. Deliberately the same shape as PATIENT_LOST and a
+     third below it: the crew has just acquired a search, and it should land in the
+     stomach rather than in the notification tray. */
+  RESIDENT_TRAPPED:    { bus: 'ui',    minGapMs: 400, parts: [[208, 139, 0.85, 'sine', 0.28], [139, 104, 0.55, 'triangle', 0.16, 0.30]] },
 
   GAS_FLASH:           { bus: 'world', minGapMs: 400, parts: [[160, 40, 0.70, 'sawtooth', 0.42], [420, 90, 0.45, 'square', 0.24]] },
   WRECK_IGNITED:       { bus: 'world', minGapMs: 500, parts: [[200, 80, 0.50, 'sawtooth', 0.26]] },
@@ -164,13 +213,55 @@ export const CUES = Object.freeze({
   TOOL_TAKEN:          { bus: 'foley', minGapMs: 120, parts: [[600, 760, 0.07, 'square', 0.13]] },
   TOOL_DROPPED:        { bus: 'foley', minGapMs: 120, parts: [[420, 300, 0.09, 'square', 0.12]] },
   NOTHING_IN_SLOT:     { bus: 'foley', minGapMs: 300, parts: [[220, 200, 0.07, 'square', 0.10]] },
+  // "You are holding the wrong thing for this." interaction.js already refuses to
+  // report it more than once every 2 s per responder, so the gap here only has to keep
+  // two crew making the same mistake at once from stacking into one thud.
+  NO_TARGET:           { bus: 'foley', minGapMs: 900, parts: [[180, 120, 0.14, 'triangle', 0.15]] },
   ENTERED_APPARATUS:   { bus: 'foley', minGapMs: 200, parts: [[180, 140, 0.14, 'triangle', 0.18]] },
   EXITED_APPARATUS:    { bus: 'foley', minGapMs: 200, parts: [[150, 190, 0.12, 'triangle', 0.16]] },
+  // The switch, not the siren. Turning it OFF is the half with no other feedback: the
+  // wail takes 60 ms to fall away and until it has, nothing says the press registered.
+  SIREN_TOGGLED:       { bus: 'foley', minGapMs: 200, parts: [[1200, 900, 0.05, 'square', 0.12]] },
   EXTINGUISHER_EMPTY:  { bus: 'foley', minGapMs: 500, parts: [[300, 150, 0.24, 'sawtooth', 0.16]] },
 
   SHIFT_ENDED:         { bus: 'ui',    minGapMs: 500, parts: [[392, 392, 0.30, 'sine', 0.26], [523, 523, 0.30, 'sine', 0.24, 0.22], [659, 659, 0.60, 'sine', 0.22, 0.44]] },
   UTILITY_ARRIVED:     { bus: 'ui',    minGapMs: 500, parts: [[600, 480, 0.18, 'sine', 0.18]] },
 });
+
+/* Events deliberately left silent. Kept as data beside CUES so that "somebody decided
+ * this one should make no sound" and "nobody noticed this event existed" are different
+ * states, and so tools\m9-tests.js can insist every name in the vocabulary is one or
+ * the other — a new event with no cue then fails a test instead of being quietly mute.
+ *
+ * SIM_PAUSED also fires on window blur (src/main.js), so a cue on it would beep at a
+ * player as they tab away to something else; and main.js already hushes every voice
+ * while the town is not PLAYING, which says the same thing far louder than a tone. */
+/* RESIDENT_OUT is silent, and it is the one entry here that was a decision rather than a
+ * fact about the engine. It fires once per person, so a four-person household is four
+ * cues in eight seconds — and the thing worth hearing is not "another one is out", it is
+ * "one of them is NOT". That fact has a sound already, and burying it under three
+ * cheerful ones is how you make it inaudible. The radio says the count in words; the
+ * silence is what makes RESIDENT_TRAPPED mean something when it comes. */
+export const SILENT_EVENTS = Object.freeze(['SIM_PAUSED', 'SIM_RESUMED', 'RESIDENT_OUT']);
+
+/** The recipe for an event, or null. OWN properties only: CUES is a plain object, so
+ *  `CUES.constructor` is a function inherited from Object.prototype — an event by that
+ *  name reached `cue.parts` as undefined and threw out of the frame, and main.js
+ *  re-arms requestAnimationFrame on the last line of frame(), so that is a frozen game
+ *  rather than a missing sound. Nothing emits `constructor` today; this makes sure
+ *  nothing ever can. */
+export function cueFor(type) {
+  return Object.prototype.hasOwnProperty.call(CUES, type) ? CUES[type] : null;
+}
+
+/** How loud one firing of a cue is, against its recipe. Pure, so the curve is
+ *  assertable: a 4 m/s nudge into a kerb (CONFIG.drive.collisionFreeSpeed, the speed
+ *  below which a bump does not even mark the truck) and a 14 m/s ram into a shop front
+ *  are the same event with very different numbers behind them — 0.64 against 1.35. */
+export function cueVolume(type, payload) {
+  if (type === 'APPARATUS_STRUCK') return Math.min(1.4, 0.35 + (payload?.impact || 0) / 14);
+  return 1;
+}
 
 /* ── the plumbing ──────────────────────────────────────────────────────────── */
 
@@ -285,6 +376,17 @@ export class GameAudio {
       src.connect(bp); bp.connect(g); g.connect(this.bus.world); src.start();
       return { src, gain: g };
     });
+
+    // The hydraulic pack: spreaders, hot stick, hydrant wrench. Low and lowpassed so it
+    // sits under the fire bed rather than competing with it — this is the one voice
+    // that plays while the player is holding a key and waiting.
+    loop('work', () => {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 96;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 300;
+      const g = ctx.createGain(); g.gain.value = 0;
+      o.connect(lp); lp.connect(g); g.connect(this.bus.world); o.start();
+      return { osc: o, filter: lp, gain: g };
+    });
   }
 
   /**
@@ -325,6 +427,13 @@ export class GameAudio {
       try { this.loops.engine.osc.frequency.setTargetAtTime(42 * mix.engine.pitch, t, 0.08); } catch (e) { /* ignore */ }
     }
 
+    ramp(this.loops.work?.gain, mix.work.gain * 0.09);
+    if (this.loops.work && mix.work.gain > 0) {
+      // 96 Hz at the start of the action to 154 Hz at the finish. Slow ramp: the point
+      // is that it is CLIMBING, and a fast follow just sounds like it is stuttering.
+      try { this.loops.work.osc.frequency.setTargetAtTime(96 * mix.work.pitch, t, 0.18); } catch (e) { /* ignore */ }
+    }
+
     // The meter. Clicks, not a tone: a rate is readable in peripheral hearing in a way
     // that a pitch is not, and it is the only sense you have for gas.
     if (mix.gasRate > 0.05) {
@@ -338,20 +447,34 @@ export class GameAudio {
     return mix;
   }
 
+  /**
+   * The decision half of a one-shot: which recipe, and may it play yet? Split out of
+   * onEvent for the same reason mixFor is split out of update — it holds the only
+   * interesting rule and it has no AudioContext anywhere near it, so the rate limit is
+   * assertable on a headless box with no sound card.
+   * @returns {object|null} the recipe to play, or null for "stay silent"
+   */
+  takeCue(type, simTimeMs) {
+    const cue = cueFor(type);
+    if (!cue) return null;
+    const last = this.lastCueAt[type];
+    /* `last <= simTimeMs` is not redundant. A new shift restarts simTimeMs at 0 while
+     * this table still holds stamps from the last one, and a stamp ten minutes in the
+     * future reads as "the gap has not passed yet" — measured: a cue stamped at
+     * t=540 s of shift one was suppressed when it fired again at t=1.2 s of shift two,
+     * and would have stayed suppressed until t=540 s of shift two, which on a 600 s
+     * shift is very nearly for ever. A stamp that has not happened yet is not a stamp. */
+    if (last != null && last <= simTimeMs && simTimeMs - last < cue.minGapMs) return null;
+    this.lastCueAt[type] = simTimeMs;
+    return cue;
+  }
+
   /** A simulation event, made audible. Unknown events are silent, never fatal. */
   onEvent(type, payload, simTimeMs) {
     if (!this.ctx || this.dead) return false;
-    const cue = CUES[type];
+    const cue = this.takeCue(type, simTimeMs);
     if (!cue) return false;
-    const last = this.lastCueAt[type];
-    if (last != null && simTimeMs - last < cue.minGapMs) return false;
-    this.lastCueAt[type] = simTimeMs;
-
-    // Impact scales what it should: a nudge into a kerb and hitting a shop at speed
-    // are the same event with very different numbers behind them.
-    let vol = 1;
-    if (type === 'APPARATUS_STRUCK') vol = Math.min(1.4, 0.35 + (payload?.impact || 0) / 14);
-
+    const vol = cueVolume(type, payload);
     for (const [f0, f1, dur, wave, gain, delay] of cue.parts) {
       tone(this.ctx, this.bus[cue.bus] || this.bus.foley, gain * vol, f0, f1, dur, wave, delay || 0);
     }
@@ -370,14 +493,22 @@ export class GameAudio {
 
 /* ── primitives, copied from somethingsdifferent.html ──────────────────────── */
 
-/** Two seconds of noise with a little brown in it — pure white is hissy. */
-export function makeNoise(ctx) {
+/** Two seconds of noise with a little brown in it — pure white is hissy.
+ *
+ *  SEEDED, not the platform generator. src/core/rng.js states the invariant — no
+ *  gameplay system may draw from an unseeded source, because implementation rule 1 is
+ *  that a playtest can be repeated — and what a shift SOUNDED like is part of what is
+ *  being repeated. This is the bed under the fire and the arc, so it was the one place
+ *  in the audio layer where two runs of seed 606 diverged. mulberry32 is the same
+ *  generator the town is built with (AirportBaggageCrew, per Dev\INDEX.md). */
+export function makeNoise(ctx, seed = 0x5EA5E7) {
   const n = Math.floor(ctx.sampleRate * 2);
   const b = ctx.createBuffer(1, n, ctx.sampleRate);
   const d = b.getChannelData(0);
+  const rnd = mulberry32(seed);
   let brown = 0;
   for (let i = 0; i < n; i++) {
-    const w = Math.random() * 2 - 1;
+    const w = rnd() * 2 - 1;
     brown = (brown + 0.02 * w) / 1.02;
     d[i] = w * 0.65 + brown * 3.2;
   }

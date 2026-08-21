@@ -31,6 +31,9 @@ const BUTTONS = [
   { action: 'use',      label: 'USE', hint: 'hold',            cls: 'use',     tap: false },
   { action: 'drop',     label: 'F',   hint: 'put down',        cls: '',        tap: true },
   { action: 'siren',    label: 'Q',   hint: 'siren',           cls: '',        tap: true },
+  // Hold to see the whole town. A phone shows sixty metres of a four-hundred-metre town,
+  // so the overview matters MORE here than on a desktop, not less.
+  { action: 'overview', label: 'MAP', hint: 'hold to look',     cls: 'map',     tap: false },
 ];
 
 export class TouchControls {

@@ -110,9 +110,26 @@ export class NetSession {
   }
 
   _hostOnMessage(m) {
+    /* Everything past this line came off somebody else's machine. A message that throws
+       here takes the host's whole shift with it, and a malformed command used to do
+       exactly that — `{t:'cmd'}` with no fields threw straight out of the handler. */
+    try { this._hostHandle(m); } catch (e) { this._say('ignored a bad message'); }
+  }
+
+  _hostHandle(m) {
     const s = this.game.state;
+    if (!m || typeof m !== 'object') return;
     if (m.t === MSG.HELLO) {
-      if (m.v !== PROTOCOL_VERSION) { this._say('version mismatch'); return; }
+      if (m.v !== PROTOCOL_VERSION) {
+        /* Say so AND hang up. Left open, a client on a stale build sat there "connected"
+           to a host that would never accept a word from it, hammering the link at 60 Hz
+           with commands nobody was going to read. */
+        this._refusedVersion = true;
+        this._say('version mismatch');
+        try { this.link.send({ t: MSG.BYE, v: PROTOCOL_VERSION, reason: 'version' }); } catch (e) { /* going anyway */ }
+        try { this.link.close(); } catch (e) { /* already gone */ }
+        return;
+      }
       // Bring the partner on exactly as the P key does, then mark them remote so the
       // step loop stops reading a keyboard for them.
       if (s.responders.length < 2) this.game.addResponder();
@@ -123,6 +140,11 @@ export class NetSession {
       return;
     }
     if (m.t === MSG.CMD) {
+      /* Commands were never version-checked, only the hello was — so a peer that had
+         been refused, or one that never said hello at all, could still drive a responder
+         on this host. A command is worthless without a partner on the crew anyway. */
+      if (m.v !== undefined && m.v !== PROTOCOL_VERSION) return;
+      if (s.responders.length < 2) return;
       this.cmdsReceived++;
       this.game.setRemoteCommand(this.remoteResponderId, m);
       return;
@@ -135,7 +157,10 @@ export class NetSession {
     const s = this.game.state;
     if (s.responders.length > 1) this.game.removeResponder();
     this.game.setRemoteCommand(this.remoteResponderId, null);
-    this._say('partner left');
+    // Hanging up on a stale build is not the same event as somebody closing their tab,
+    // and the status has to keep saying which it was — the close we ourselves triggered
+    // used to overwrite the reason with "partner left".
+    this._say(this._refusedVersion ? 'version mismatch' : 'partner left');
   }
 
   /* ── client ───────────────────────────────────────────────────────────── */

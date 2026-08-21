@@ -439,6 +439,64 @@ lines.push('--- H. movement (structures stop trucks, not people) ---');
 emit('running H');
 }
 
+/* ── H2. the house rule about randomness, actually enforced ──────────────── */
+function sectionRandom() {
+lines.push('--- H2. nothing that draws or simulates may call Math.random ---');
+  /* src/core/rng.js has claimed since it was written that "tools\m0-tests.js greps src/
+   * for Math.random and fails the build if one appears". No suite ever did. The claim
+   * cost something real: the audio layer's noise bed was built from Math.random, so two
+   * runs of one seed did not sound the same, and it sat there until somebody read the
+   * file. A comment that describes a test is worth nothing; this is the test.
+   *
+   * Synchronous XHR on purpose — the suite emits after every section, and an await would
+   * reorder that against the DOM dump the harness greps. */
+  const FILES = [
+    'src/game.js', 'src/config.js',
+    'src/core/clock.js', 'src/core/eventBus.js', 'src/core/input.js',
+    'src/core/persistence.js', 'src/core/rng.js',
+    'src/sim/hazards.js', 'src/sim/victims.js', 'src/sim/incidentSim.js',
+    'src/sim/dispatch.js', 'src/sim/movement.js', 'src/sim/interaction.js',
+    'src/render/camera.js', 'src/render/renderer.js',
+    'src/audio/audio.js', 'src/ui/hud.js', 'src/ui/coach.js', 'src/ui/shiftReport.js',
+    'src/ui/touch.js', 'src/ui/a11y.js', 'src/net/protocol.js', 'src/main.js',
+  ];
+  /* One deliberate exception, and it has to be deliberate: a room code that a stranger
+   * could predict is not a room code. randCode takes its randomness as an argument and
+   * defaults to Math.random for exactly that reason. */
+  const ALLOWED = { 'src/net/net.js': 'randCode — an unpredictable room code is the point' };
+
+  const read = (path) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', path, false);
+    x.send(null);
+    return (x.status === 200 || x.status === 0) ? x.responseText : null;
+  };
+
+  /* Comments are stripped first. Several files EXPLAIN this rule in prose, naming the
+     call while forbidding it, and a grep that cannot tell a rule from a violation would
+     flag src/core/rng.js — the file that states the invariant — as breaking it. */
+  const stripComments = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+
+  const offenders = [];
+  let scanned = 0;
+  for (const f of FILES) {
+    const text = read(f);
+    if (text == null) { offenders.push(`${f} could not be read`); continue; }
+    scanned++;
+    if (/Math\s*\.\s*random\s*\(/.test(stripComments(text))) offenders.push(f);
+  }
+  gt('H2-1 the scan actually read the source', scanned, 18);
+  eq('H2-2 no simulation, renderer, audio or UI file calls Math.random', offenders.join(', '), '');
+
+  const net = read('src/net/net.js');
+  ok('H2-3 the one allowed exception is still the one that is allowed',
+    net != null && /Math\s*\.\s*random/.test(net) && Object.keys(ALLOWED)[0] === 'src/net/net.js');
+  ok('H2-4 and it is randCode, taking it as a default argument rather than reaching for it',
+    net != null && /randCode\s*\(\s*rand\s*=\s*Math\.random\s*\)/.test(net));
+}
+
 /* ── I. live frames ──────────────────────────────────────────────────────── */
 function sectionI() {
 lines.push('--- I. live simulation (time moves only through frame()) ---');
@@ -595,7 +653,7 @@ emit(null);
 /* ── go ──────────────────────────────────────────────────────────────────── */
 try {
   sectionA(); sectionB(); sectionC(); sectionD(); sectionE();
-  sectionF(); sectionG(); sectionH(); sectionI(); sectionJ();
+  sectionF(); sectionG(); sectionH(); sectionRandom(); sectionI(); sectionJ();
 } catch (err) {
   fails++;
   lines.push(`FAIL  suite threw: ${err && err.message}`);

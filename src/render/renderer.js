@@ -31,6 +31,7 @@ import {
 } from '../data/town.js';
 import { TOOL_DEFS } from '../data/equipment.js';
 import { victimState } from '../sim/victims.js';
+import { motionScalars, pulse01, blinkOn, dampen } from '../ui/a11y.js';
 
 const PALETTE = {
   grass: '#688f4e', grassAlt: '#5f8547',
@@ -57,6 +58,24 @@ const WALL = {
   station: '#d8cdbc', shop: '#e2d6bd', civic: '#e6e2d6', house: '#e0d5c0',
   housing: '#cfc2ad', barn: '#8d5a3f', industry: '#b9bcc2', clinic: '#eef2f5',
 };
+
+/* A casualty's condition, in a pattern rather than only in a hue. Solid is fine, longer
+   dashes are worse, dotted is unconscious or lost — readable in greyscale. */
+const RING_DASH = Object.freeze({
+  stable: [], injured: [0.8, 0.5], critical: [0.35, 0.3],
+  unconscious: [0.12, 0.35], lost: [0.12, 0.35],
+});
+
+/* Ordinary clothes. Muted on purpose: the crew's turnout yellow and the partner's tint
+   are the two brightest things a person can be wearing in this town, and a bystander must
+   never be mistaken for either at a glance. Which coat a resident gets is a hash of their
+   id, so a given person looks the same all shift. */
+const CIVILIAN_COATS = ['#5b6b8a', '#7a6a56', '#6a5b74', '#4f6b63', '#8a6f6f', '#5d7a86'];
+function hashId(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
 
 /** How tall each kind stands, in metres. Presentation only — nothing collides with it. */
 const HEIGHT = {
@@ -124,6 +143,12 @@ export class Renderer {
     this.labels = [];
     this.markers = [];
     this.props = [];
+    /* Reduced motion, read once. Every flicker, pulse and blink below is damped toward
+       the MIDDLE of its swing rather than switched off, so a siren that stops blinking
+       is still lit and a marker that stops pulsing is still a marker. Measured: the stun
+       flash was the only animation in the game above the WCAG 2.3.1 three-per-second
+       threshold, at 4.46 Hz, because Math.abs() doubles a sine's flash rate. */
+    this.motion = motionScalars(typeof window !== 'undefined' ? window : null);
   }
 
   render(state, nowMs = 0) {
@@ -348,10 +373,10 @@ export class Renderer {
           const c = h.cells[i];
           if (!c.burning) continue;
           n++;
-          this.lightPool(ctx, c.x, c.y, 11 + wobble(i, t, 3) * 1.6, 0.10);
+          this.lightPool(ctx, c.x, c.y, 11 + wobble(i, t, 3) * 1.6 * this.motion.firelightWobble, 0.10);
         }
       } else if (h.kind === 'wreck' && h.burning) {
-        this.lightPool(ctx, h.x, h.y, 13 + wobble(3, t, 3) * 2, 0.13);
+        this.lightPool(ctx, h.x, h.y, 13 + wobble(3, t, 3) * 2 * this.motion.firelightWobble, 0.13);
       }
     }
     ctx.restore();
@@ -441,6 +466,23 @@ export class Renderer {
     for (const ap of state.apparatus) {
       this.prop(ap.y, (ctx) => this.drawApparatus(ctx, state, ap, t),
         (ctx) => this.apparatusShadow(ctx, state, ap));
+    }
+
+    /* The people who live here. Drawn before the crew, so that a responder is never
+       hidden behind a bystander — the one thing that must always be findable on this
+       screen is the person you are controlling. Somebody who is `trapped` is not drawn
+       here at all: they are a casualty now, and drawVictim owns them, rings and all. */
+    for (const r of state.residents || []) {
+      if (r.state === 'trapped') continue;
+      /* Somebody indoors is only drawn once a responder is in there with them — the same
+         condition that takes the roof off (collectBuilding `occupied`). Drawing them
+         through a solid roof would give the search away from the street. */
+      if (r.insideBuildingId &&
+          !state.responders.some((p) => p.insideBuildingId === r.insideBuildingId)) continue;
+      const host = r.insideBuildingId ? BUILDING_BY_ID[r.insideBuildingId] : null;
+      const depth = host ? host.y + host.h + 0.005 : r.y;
+      this.prop(depth, (ctx) => this.drawResident(ctx, r),
+        host ? null : (ctx) => this.groundShadow(ctx, r.x + 0.18, r.y + 0.22, 0.6, 0.42));
     }
 
     for (const p of state.responders) {
@@ -737,7 +779,7 @@ export class Renderer {
     for (let i = 0; i < fire.cells.length; i++) {
       const c = fire.cells[i];
       if (!c.burning) continue;
-      const f = 0.80 + wobble(i, t, 8) * 0.18;
+      const f = 0.80 + wobble(i, t, 8) * 0.18 * this.motion.fireFlicker;
       const r = Math.max(cw, ch) * 0.78 * f;
       const p = cam.top(c.x, c.y, h + 1.1 * f);
       ctx.save();
@@ -796,7 +838,7 @@ export class Renderer {
     // wallpaper, and this costs nothing and is stable across frames
     const r = 2.6 + ((i * 37) % 11) / 11 * 1.4;
     const hh = 3.4 + ((i * 29) % 9) / 9 * 1.6;
-    const sway = wobble(i, t, 0.5) * 0.22;
+    const sway = wobble(i, t, 0.5) * 0.22 * this.motion.treeSway;
 
     /* The trunk runs INTO the canopy, not up to it. Drawn to the canopy's underside it
        reads as a ball floating over a stick, which is what the first pass looked like. */
@@ -965,7 +1007,7 @@ export class Renderer {
         ctx.beginPath(); ctx.ellipse(pwr.x, pwr.y, 1.4, 1.4, 0, 0, Math.PI * 2); ctx.stroke();
         continue;
       }
-      const pulse = 0.5 + 0.5 * Math.sin(t * 5);
+      const pulse = pulse01(t, 0.7958, this.motion.powerPulse);
       ctx.fillStyle = `rgba(120,190,255,${0.10 + pulse * 0.07})`;
       ctx.beginPath(); ctx.ellipse(pwr.x, pwr.y, pwr.radiusM, pwr.radiusM, 0, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = `rgba(150,215,255,${0.55 + pulse * 0.35})`;
@@ -1028,7 +1070,7 @@ export class Renderer {
       const phase = (t * 0.5 + k * 0.33 + seed * 0.17) % 1;
       const rad = 1.1 + phase * 2.9;
       const alpha = (1 - phase) * 0.15 * strength;
-      const p = cam.top(x + wobble(seed + k, t, 1.2) * 2.4, y, baseH + 1 + phase * 13);
+      const p = cam.top(x + wobble(seed + k, t, 1.2) * 2.4 * this.motion.smokeDrift, y, baseH + 1 + phase * 13);
       ctx.fillStyle = `rgba(66,64,70,${alpha.toFixed(3)})`;
       ctx.beginPath();
       ctx.ellipse(p.x, p.y, rad, rad * 0.86, 0, 0, Math.PI * 2);
@@ -1053,7 +1095,7 @@ export class Renderer {
         for (let k = 0; k < 2; k++) {
           const phase = (t * 0.42 + i * 0.29 + k * 0.5) % 1;
           const a = (1 - phase) * 0.5;
-          const p = cam.top(c.x + wobble(i + k, t, 0.9) * 3.2, c.y, base + phase * 15);
+          const p = cam.top(c.x + wobble(i + k, t, 0.9) * 3.2 * this.motion.emberDrift, c.y, base + phase * 15);
           ctx.fillStyle = `rgba(255,${170 + Math.round(phase * 60)},90,${a.toFixed(3)})`;
           ctx.beginPath();
           ctx.arc(p.x, p.y, 0.26 * (1 - phase * 0.5), 0, Math.PI * 2);
@@ -1088,8 +1130,17 @@ export class Renderer {
   drawVictim(ctx, v) {
     const cam = this.camera;
     const st = victimState(v);
-    const ring = st === 'lost' ? '#5c5c5c' : st === 'unconscious' ? '#8e44ad'
-      : st === 'critical' ? '#e74c3c' : st === 'injured' ? '#e8a33d' : '#5fbf6a';
+    /* Condition is carried by the DASH PATTERN as well as the colour.
+     *
+     * Measured under simulated colour-vision deficiency (tools\m10-tests.js): the old
+     * ring set put stable against injured at 5.8 for a protanope and stable against
+     * critical at 10.5 for a deuteranope, on a scale where the two crew tints — the pair
+     * nobody ever confuses — sit at 48. The new colours are 21.6 apart at worst, and the
+     * dash means the ring still says which patient this is in greyscale, at a glance,
+     * for somebody who sees none of the hues. */
+    const ring = st === 'lost' ? '#6b6b6b' : st === 'unconscious' ? '#5b2c85'
+      : st === 'critical' ? '#b02418' : st === 'injured' ? '#e8a33d' : '#daf7cf';
+    const dash = RING_DASH[st] || [];
 
     // a casualty is lying down: low to the ground, and the marker does the work
     ctx.fillStyle = v.lost ? '#6d6a6a' : PALETTE.victim;
@@ -1098,7 +1149,9 @@ export class Renderer {
     ctx.beginPath(); ctx.ellipse(v.x - 0.62, v.y - 0.1, 0.34, 0.3, 0, 0, Math.PI * 2); ctx.fill();
 
     ctx.strokeStyle = ring; ctx.lineWidth = 0.28;
+    ctx.setLineDash(dash);   // dashes are in METRES here: the world transform is in force
     ctx.beginPath(); ctx.ellipse(v.x, v.y, 1.5, 1.0, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
 
     if (v.trappedBy) {
       ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 0.25;
@@ -1115,6 +1168,32 @@ export class Renderer {
       ctx.fillStyle = ring;
       ctx.fillRect(p.x - 1.06, p.y - 0.24, 2.12 * v.condition, 0.48);
     }
+  }
+
+  /* A resident. Deliberately plainer and shorter than a responder: no helmet, no facing
+   * pip, no reflective band, muted clothes. You should be able to tell at a glance which
+   * of two figures is yours, and you should be able to tell it in greyscale.
+   *
+   * NO STATE IS CARRIED BY COLOUR HERE, on purpose. A bystander's condition is not a
+   * signal the audit covers, and the moment one of them stops being fine they stop being
+   * drawn by this method at all — they become a casualty, with the audited dashed ring
+   * that every other casualty has. */
+  drawResident(ctx, r) {
+    const cam = this.camera;
+    const rad = CONFIG.residents.radiusM;
+    const coat = CIVILIAN_COATS[hashId(r.id) % CIVILIAN_COATS.length];
+
+    ctx.fillStyle = 'rgba(18,16,22,0.6)';
+    ctx.beginPath(); ctx.ellipse(r.x, r.y, rad * 1.5, rad, 0, 0, Math.PI * 2); ctx.fill();
+
+    const legs = this.rectPts(r.x - rad * 0.6, r.y - rad * 0.45, rad * 1.2, rad * 0.9);
+    this.prism(ctx, legs, 0.72, { wall: '#39373f', top: null, edge: null });
+    const torso = this.rectPts(r.x - rad * 0.75, r.y - rad * 0.55, rad * 1.5, rad * 1.1);
+    this.prism(ctx, torso, 1.34, { wall: coat, top: shade(coat, 1.1), edge: 'rgba(0,0,0,0.3)' });
+
+    const head = cam.top(r.x, r.y, 1.56);
+    ctx.fillStyle = PALETTE.victim;
+    ctx.beginPath(); ctx.ellipse(head.x, head.y, rad * 0.7, rad * 0.58, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   apparatusShadow(ctx, state, ap) {
@@ -1197,7 +1276,7 @@ export class Renderer {
       this.fillPoly(ctx, bodyTop, `rgba(30,24,20,${Math.min(0.55, ap.damage)})`);
     }
 
-    const blink = Math.sin(t * 12) > 0;
+    const blink = blinkOn(t, 1.9099, this.motion.sirenBlink);
     if (ap.siren) {
       // The lightbar sits on the cab roof, where it can be seen over the traffic.
       const barA = pt(L * 0.2, -W / 2 + 0.3), barB = pt(L * 0.2, W / 2 - 0.3);
@@ -1215,7 +1294,8 @@ export class Renderer {
       ctx.beginPath(); ctx.arc(ap.x, ap.y, 9, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
 
-      const r = CONFIG.drive.sirenClearRadiusM * (0.6 + 0.4 * Math.abs(Math.sin(t * 3)));
+      const r = CONFIG.drive.sirenClearRadiusM *
+        dampen(0.6 + 0.4 * Math.abs(Math.sin(t * 3)), 0.8, this.motion.sirenRing);
       ctx.strokeStyle = `rgba(255,120,120,${blink ? 0.16 : 0.10})`;
       ctx.lineWidth = 0.4;
       ctx.beginPath(); ctx.ellipse(ap.x, ap.y, r, r, 0, 0, Math.PI * 2); ctx.stroke();
@@ -1314,7 +1394,9 @@ export class Renderer {
     ctx.beginPath(); ctx.ellipse(head.x, head.y - 0.2, r * 0.9, r * 0.5, 0, Math.PI, 0); ctx.fill();
 
     if (p.stunMs > 0) {
-      ctx.strokeStyle = `rgba(255,220,90,${0.4 + 0.4 * Math.abs(Math.sin(t * 14))})`;
+      // 14 rad/s with Math.abs is 4.46 flashes a second — the only animation in the game
+      // over the WCAG 2.3.1 threshold of three. 6 rad/s is 1.91.
+      ctx.strokeStyle = `rgba(255,220,90,${dampen(0.4 + 0.4 * Math.abs(Math.sin(t * 6)), 0.6, this.motion.stunFlash)})`;
       ctx.lineWidth = 0.3;
       ctx.beginPath(); ctx.ellipse(p.x, p.y, r * 3, r * 2, 0, 0, Math.PI * 2); ctx.stroke();
     }
@@ -1355,7 +1437,7 @@ export class Renderer {
       if (s.x < -60 || s.y < -30 || s.x > cam.cssW + 60 || s.y > cam.cssH + 30) continue;
       ctx.font = `${l.weight || 600} ${l.size}px "Segoe UI", system-ui, sans-serif`;
       ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.strokeStyle = 'rgba(0,0,0,0.62)';
       ctx.strokeText(l.text, s.x, s.y);
       ctx.fillStyle = l.colour || PALETTE.ui;
       ctx.fillText(l.text, s.x, s.y);
@@ -1366,11 +1448,20 @@ export class Renderer {
    *  keeps going without you — so it had better keep telling you where. */
   drawIncidentMarkers(ctx, state, t) {
     const cam = this.camera;
-    const pulse = 0.5 + 0.5 * Math.sin(t * 4);
+    const pulse = pulse01(t, 0.6366, this.motion.markerPulse);
 
     for (const inc of state.incidents) {
       if (inc.status !== 'queued' && inc.status !== 'active') continue;
-      const colour = inc.priority === 'critical' ? '#ff5252' : inc.priority === 'high' ? '#ffa726' : '#ffe082';
+      /* Priority, three ways: colour, ring COUNT, and a bang on the headline.
+       *
+       * The colours alone measured 5.0 apart under simulated tritanopia (CIEDE2000),
+       * against 48 for the two crew tints that nobody ever confuses — and the three
+       * priorities differ almost entirely along b*, which is the axis that deficiency
+       * takes, so a greyscale check passes them. The new set is 13.7 apart AND the ring
+       * count says the same thing without any colour at all. */
+      const crit = inc.priority === 'critical', high = inc.priority === 'high';
+      const colour = crit ? '#c0271f' : high ? '#e8850f' : '#fff0c0';
+      const tag = crit ? '!! ' : high ? '! ' : '';
       const s = cam.worldToScreen(inc.x, inc.y);
       const onScreen = s.x > 20 && s.y > 20 && s.x < cam.cssW - 20 && s.y < cam.cssH - 20;
 
@@ -1379,14 +1470,28 @@ export class Renderer {
         ctx.lineWidth = 2;
         ctx.globalAlpha = 0.35 + pulse * 0.35;
         // an ellipse, because it is lying on a tilted ground plane like everything else
-        ctx.beginPath();
-        ctx.ellipse(s.x, s.y, 24 + pulse * 6, (24 + pulse * 6) * cam.tilt, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        const rings = crit || high ? 2 : 1;
+        for (let k = 0; k < rings; k++) {
+          const rr = 24 + pulse * 6 + k * 7;
+          ctx.beginPath();
+          ctx.ellipse(s.x, s.y, rr, rr * cam.tilt, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        if (crit) {
+          ctx.fillStyle = colour;
+          ctx.beginPath(); ctx.ellipse(s.x, s.y, 5, 5 * cam.tilt, 0, 0, Math.PI * 2); ctx.fill();
+        }
         ctx.globalAlpha = 1;
-        ctx.fillStyle = colour;
+        /* The headline is TEXT, not a signal, and it was being painted in the priority
+           colour straight onto grass: measured 1.00:1 against the town for a routine
+           call. drawLabels has always haloed its text; this call site never did. */
         ctx.font = '700 11px "Segoe UI", system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(inc.headline, s.x, s.y - 30);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.62)';
+        ctx.strokeText(tag + inc.headline, s.x, s.y - 30);
+        ctx.fillStyle = '#fdf6e6';
+        ctx.fillText(tag + inc.headline, s.x, s.y - 30);
       } else {
         const cx = cam.cssW / 2, cy = cam.cssH / 2;
         const a = Math.atan2(s.y - cy, s.x - cx);
@@ -1403,13 +1508,17 @@ export class Renderer {
         ctx.restore();
         ctx.globalAlpha = 1;
         const dm = Math.round(Math.hypot(inc.x - state.player.x, inc.y - state.player.y));
-        ctx.fillStyle = colour;
-        ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
+        ctx.font = '700 11px "Segoe UI", system-ui, sans-serif';
         ctx.textAlign = 'center';
         // keep the label on screen: at the left edge it was being drawn half off it
         const lx = Math.min(cam.cssW - 70, Math.max(70, ex - Math.cos(a) * 26));
         const ly = Math.min(cam.cssH - 14, Math.max(14, ey - Math.sin(a) * 26));
-        ctx.fillText(`${inc.headline} ${dm}m`, lx, ly);
+        // same halo as every other label: this one measured 1.02:1 on open grass
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.62)';
+        ctx.strokeText(`${tag}${inc.headline} ${dm}m`, lx, ly);
+        ctx.fillStyle = '#fdf6e6';
+        ctx.fillText(`${tag}${inc.headline} ${dm}m`, lx, ly);
       }
     }
     ctx.globalAlpha = 1;

@@ -166,6 +166,59 @@ export const CONFIG = {
     declineLiveMul: 1.7,
   },
 
+  /* ── residents (src/sim/residents.js) ──────────────────────────────────── */
+  residents: {
+    radiusM: 0.34,
+    walkSpeed: 1.5,             // m/s before mobility; a responder does 4.2
+    fleeSpeedMul: 1.55,
+    mobilityMin: 0.55,          // drawn per person: the slow ones are the story
+    mobilityMax: 1.15,
+    wanderChance: 0.008,        // per second, someone at home steps outside
+    wanderM: 22,
+
+    /* Getting out. `reactMs` is scaled by (1.4 - nerve): nerve 1.0 is moving in 4.0 s and
+       nerve 0.25 stands there for 11.5 s.
+
+       ⚠ THE HESITATION IS THE WHOLE DISTRIBUTION. At 6000 the spread of time-spent-inside
+       was 14.4 s to 16.7 s across a whole population — so tight that collapseMs 15000
+       trapped 34.6% of the town and 24000 trapped nobody, with nothing usable in between.
+       A slow walker also spends their extra seconds FURTHER from the fire, at a lower
+       exposure rate, so mobility very nearly cancels itself out and the hesitation is the
+       only term with real variance in it. */
+    alertHeat: 0.12,
+    reactMs: 10000,
+    exitRadiusM: 2.2,
+    safeM: 26,
+    /* Exposure accrues at (0.35 + local heat + involvement x 0.8) x real time, where
+       involvement is the fraction of the whole structure alight — smoke does not care
+       which room you are in, and local heat alone reaches 9 m, which is clear air at the
+       far end of the apartments.
+
+       MEASURED at 23000, over 24 households and 52 people on four seeds: 3 did not get
+       out (5.8%), never more than one from a household, and the mean building was clear
+       at 16.5 s against the ~25 s it takes to cross town in the engine. That is the
+       intended shape — you arrive to be told who is still inside, not to watch everyone
+       walk out. */
+    collapseMs: 23000,
+    criticalExposureFrac: 0.82, // past this fraction of collapseMs they are found critical
+
+    /* Watching. The ring is outside the working area — they are nosy, not suicidal.
+       `curiosityChance` is what makes a crowd a crowd: without it the only people who
+       ever saw a fire were the ones who happened to be outdoors when it started, and a
+       crowd took ninety seconds to assemble out of passers-by. At 0.06/s a household
+       within the gather radius is on the street inside about twenty seconds, and they
+       trickle out rather than all arriving at once. */
+    curiosityChance: 0.06,
+    gatherRadiusM: 70,
+    gawkRadiusM: 11,
+    crowdRadiusM: 4.0,
+    crowdDragPerHead: 0.13,
+    crowdDragMin: 0.55,         // the slowest a crowd may ever make you: friction, not a wall
+    scatterMs: 12000,           // how long a sirened crowd stays cleared
+
+    reroundMs: 4000,            // _drift: no progress for this long, try the other hand
+  },
+
   /* ── the coach (src/ui/coach.js) ───────────────────────────────────────── */
   coach: {
     /* The five verbs, in the order a first shift teaches them. Lives here rather than in
@@ -227,6 +280,7 @@ export const CONFIG = {
     confidencePatientLost: -0.075,
     confidenceStructureLost: -0.06,
     repairShifts: 3,           // shifts a gutted building stays boarded up
+    hydrantDownShifts: 1,      // a struck hydrant is out for this many shifts after
   },
 
   /* ── debug ──────────────────────────────────────────────────────────────── */

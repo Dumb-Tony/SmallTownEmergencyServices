@@ -112,11 +112,49 @@ try {
   eq('and carrying both of them', snap && snap.rs.length, 2);
   ok('still no crash banner', !banner(), bannerText());
 
+  /* The overview, driven through the real frame loop.
+   *
+   * Safe here and nowhere else: under --dump-dom the page's own rAF never ticks, so
+   * calling frame() by hand does not fork a render chain the way it does under
+   * --screenshot. Thirty frames of a 60 m view widening to the whole town. */
+  lines.push('--- hold V for the whole town ---');
+  S.startShift();
+  const t1 = performance.now();
+  for (let i = 0; i < 20; i++) S.frame(t1 + i * 16);
+  const tight = S.camera.viewWidthM;
+  const timeBefore = S.game.state.simTimeMs;
+
+  S.input.holdVirtual('overview');
+  for (let i = 0; i < 45; i++) S.frame(t1 + 400 + i * 16);
+  const wide = S.camera.viewWidthM;
+  ok('holding it pulls the camera out to the whole town', wide > tight * 2.5,
+    `${tight.toFixed(0)} m -> ${wide.toFixed(0)} m`);
+  ok('far enough out to see all of it', wide > 380, `${wide.toFixed(0)} m`);
+  ok('and the town kept running while the player looked at it',
+    S.game.state.simTimeMs > timeBefore, 'rule 3: nothing pauses for a panel');
+
+  S.input.releaseVirtual('overview');
+  for (let i = 0; i < 60; i++) S.frame(t1 + 1600 + i * 16);
+  ok('letting go comes back to the street', S.camera.viewWidthM < wide * 0.6,
+    `${S.camera.viewWidthM.toFixed(0)} m`);
+  S.game.togglePause();
+
   S.net.leave();
   eq('leaving puts the page back to solo', S.net.role, 'solo');
   ok('and hides the chip again', q('#netchip').hidden);
-  eq('the town is still on the title card, unstarted', S.game.state.mode, 'title');
+  ok('and the shift the overview check started is paused, not lost',
+    S.game.state.mode === 'paused' || S.game.state.mode === 'title', S.game.state.mode);
   emit(null);
+
+  /* Let the page IDLE, now that everything has been asked of it.
+   *
+   * main.js re-arms requestAnimationFrame on the last line of frame(), so the loop runs
+   * until Chrome's virtual-time budget is spent — 600 s of virtual time is 36 000
+   * rendered frames, and a headless canvas with no GPU draws them at ten times the cost
+   * of a real one. This check finished in three seconds and then sat there painting a
+   * title card for seven minutes. Stubbing rAF breaks the chain; it is the same trick
+   * the screenshot poses use, and it goes AFTER the assertions so nothing is skipped. */
+  window.requestAnimationFrame = () => 0;
 } catch (err) {
   fails++;
   lines.push(`FAIL  boot check threw: ${err && err.message}`);

@@ -39,8 +39,15 @@ export function stepPlayerMovement(state, axis, dtMs, aim = null, r = state.play
     if (dx * dx + dy * dy > 0.09) p.facing = Math.atan2(dy, dx);
   }
 
+  /* A crowd is friction, and it arrives here as a number rather than as an import.
+   * `p.crowdDrag` is set once per responder per step in game.js, from
+   * residents.js `crowdDragAt` — residents already import this module for resolveOnFoot,
+   * and importing back would make a cycle out of a multiplication. It bottoms out at
+   * CONFIG.residents.crowdDragMin so pushing through onlookers is always possible:
+   * costly, never impossible. */
   const speedMul = (p.draggingVictimId ? P.carrySpeedMul : 1) *
-                   (p.toolId && state.toolsById[p.toolId]?.twoHanded ? 0.88 : 1);
+                   (p.toolId && state.toolsById[p.toolId]?.twoHanded ? 0.88 : 1) *
+                   (p.crowdDrag || 1);
   const target = P.maxSpeed * speedMul;
 
   if (axis.x || axis.y) {
@@ -85,7 +92,10 @@ export function stepPlayerMovement(state, axis, dtMs, aim = null, r = state.play
 }
 
 /** Doors, and the walls that make a door mean something. */
-function resolveOnFoot(p, r) {
+/* Exported because a resident has to be contained by exactly the same walls a responder
+ * is. Two implementations of "you leave the way you came in" would eventually disagree,
+ * and the disagreement would be a person standing inside a wall. */
+export function resolveOnFoot(p, r) {
   if (p.insideBuildingId) {
     const b = BUILDING_BY_ID[p.insideBuildingId];
     const nearDoor = dist(p.x, p.y, b.door.x, b.door.y) < 3.4;

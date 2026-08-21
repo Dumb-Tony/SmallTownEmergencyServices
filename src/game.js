@@ -29,6 +29,9 @@ import {
 import { createDispatchState, stepDispatch, radio } from './sim/dispatch.js';
 import { stepPlayerMovement, stepApparatusMovement } from './sim/movement.js';
 import { stepInteraction } from './sim/interaction.js';
+import {
+  createResidents, stepResidents, resetResidentIds, crowdDragAt,
+} from './sim/residents.js';
 import { buildShiftReport } from './ui/shiftReport.js';
 import {
   encodeSnapshot, applySnapshot, encodeCommand, decodeCommand, EMPTY_COMMAND,
@@ -89,6 +92,15 @@ export function createInitialState({ seed, seedLabel, town }) {
 
     hazards: [],
     victims: [],
+    /* The people who live here, drawn from a stream of their own.
+     *
+     * A SEPARATE stream on purpose. Residents draw at spawn and again every time somebody
+     * decides to step outside, and putting those draws in the shift's main stream would
+     * shift every dispatch pace, incident site and hazard roll downstream of them — the
+     * town would still be deterministic, and it would be a DIFFERENT town, on every seed
+     * anyone had ever measured. Named streams are already the idiom (see src/core/rng.js);
+     * this is what they are for. */
+    residents: [],
     incidents: [],
     dispatch: createDispatchState(),
     radio: [],
@@ -97,6 +109,7 @@ export function createInitialState({ seed, seedLabel, town }) {
     outcome: {
       controlled: 0, lost: 0, patientsSaved: 0, patientsLost: 0,
       structuresLost: 0, structuresLostNames: [], confidenceStart: town.confidence,
+      residentsOut: 0, residentsTrapped: 0,
     },
     telemetry: {
       distanceDrivenM: 0, litresUsed: 0, waterOnTarget: 0,
@@ -144,6 +157,10 @@ export function createInitialState({ seed, seedLabel, town }) {
     t.x = STATION.rack.x; t.y = STATION.rack.y;
   }
 
+  // Who is home tonight. Derived from the shift seed, on its own stream.
+  resetResidentIds();
+  state.residents = createResidents(new Rng((seed ^ 0x9e3779b9) >>> 0, 'residents'));
+
   return state;
 }
 
@@ -156,6 +173,7 @@ export class Game {
     this.seed = seed;
     this.seedLabel = seedLabel;
     this.rng = new Rng(seed, seedLabel);
+    this.people = new Rng((seed ^ 0x9e3779b9) >>> 0, 'residents');
     this.town = loadTown();
     this.state = createInitialState({ seed, seedLabel, town: this.town });
     this._subs = new Set();
@@ -172,6 +190,7 @@ export class Game {
     this.town = loadTown();
     const seed = (hashStr(`${this.seedLabel}#${this.town.shiftNumber}`) ^ this.seed) >>> 0;
     this.rng = new Rng(seed, `${this.seedLabel}#${this.town.shiftNumber}`);
+    this.people = new Rng((seed ^ 0x9e3779b9) >>> 0, 'residents');
     resetHazardIds(); resetVictimIds(); resetIncidentIds();
     this.clock.reset();
     this.bus.clearLog();
@@ -212,6 +231,19 @@ export class Game {
 
   step(stepMs, input) {
     const s = this.state;
+
+    /* Nothing happens after the bell.
+     *
+     * frame() guards the mode, but the clock's accumulator does not: endShift() sets
+     * mode to REPORT part-way through a frame's worth of steps, and the remaining ones
+     * ran anyway. Measured with a 250 ms frame straddling the end of a shift: thirteen
+     * steps of world simulated AFTER the report had been built, the confidence banked
+     * and the town saved — and in them a casualty died, so the report said "0 lost"
+     * over a state that said 1, and the saved confidence disagreed with the live one.
+     * At 60 fps it is a step or two, which is exactly the kind of bug nobody ever
+     * catches by playing. */
+    if (s.mode !== MODES.PLAYING) return [];
+
     s.simTimeMs = this.clock.simTimeMs;
 
     const events = [];
@@ -241,6 +273,10 @@ export class Game {
         }
         if (ap) { r.x = ap.x; r.y = ap.y; r.facing = ap.angle; }
       } else {
+        /* Set, not reset. A crowd's drag is derived from where this responder is standing
+         * right now, so it is computed once a step and read once a step — never left over
+         * from a step in which they were somewhere else. */
+        r.crowdDrag = crowdDragAt(s, r.x, r.y);
         events.push(...stepPlayerMovement(s, cmd.axis, stepMs, cmd.aim, r));
         s.telemetry.timeOnFootMs += stepMs;
       }
@@ -249,6 +285,7 @@ export class Game {
 
     /* 3. the world, whether or not anyone is watching it */
     events.push(...stepHazards(s, stepMs, this.rng));
+    events.push(...stepResidents(s, stepMs, this.people));
     events.push(...stepVictims(s, stepMs));
     applySirenEffect(s);
     writeThroughDamage(s);
@@ -312,13 +349,33 @@ export class Game {
         }
 
         case 'FIRE_EXTENDED': {
+          /* A fire takes the building next door whether or not anybody is still counting
+           * the call as open.
+           *
+           * This used to require `isOpen(host)`, so the marquee system in the game
+           * switched itself off at exactly the moment things were worst: an unattended
+           * structure fire reaches danger 1.0, the call is declared lost, and from then
+           * on every exposure jump was silently dropped. Measured on one seed, Miller
+           * Farmhouse six metres from Miller Barn: call open, one attempt, the barn
+           * catches; call lost, seven attempts, nothing ever catches — while the
+           * farmhouse burned to 100% either way.
+           *
+           * The guard also had to be here rather than only in stepWreck: with nothing
+           * ever created, the emitting condition never cleared and a constructed case
+           * produced 1200 of these events in twenty seconds. */
           const b = BUILDING_BY_ID[e.buildingId];
+          if (s.hazards.some((h) => h.kind === 'fire' && h.buildingId === e.buildingId)) break;
           const host = inc || s.incidents.find((i) => i.hazardIds.includes(e.fromHazardId));
+          const fire = createFire(e.buildingId, { seedCells: 1, heat: 0.9, from: 'centre' });
           if (host && isOpen(host)) {
-            addHazard(s, host, createFire(e.buildingId, { seedCells: 1, heat: 0.9, from: 'centre' }));
+            addHazard(s, host, fire);
             host.danger = Math.min(0.95, host.danger + 0.06);
-            radio(s, `Fire has extended to ${b.name}.`, 'bad');
+          } else {
+            // Nobody's call any more — but still the town's building, and the damage is
+            // still written through to the save by writeThroughDamage().
+            s.hazards.push(fire);
           }
+          radio(s, `Fire has extended to ${b.name}.`, 'bad');
           break;
         }
         case 'GAS_FLASH': {
@@ -354,6 +411,29 @@ export class Game {
           break;
         case 'PATIENT_EXTRICATED':
           radio(s, 'Casualty is free of the wreck.', 'good');
+          break;
+
+        /* An ABSENCE is the information. Two lines per building and no more: the first
+         * person out, who tells you how many are behind them, and the moment there is
+         * nobody left, which tells you to stop looking. A line per resident would bury
+         * the dispatch board under a four-person household. */
+        case 'RESIDENT_OUT': {
+          const b = BUILDING_BY_ID[e.buildingId];
+          if (e.insideAfter === 0) radio(s, `That is everybody out of ${b.name}.`, 'good');
+          else if (e.outSoFar <= 1) {
+            radio(s, `Somebody is out of ${b.name} — they say there ${e.insideAfter === 1
+              ? 'is one more person' : `are ${e.insideAfter} more people`} inside.`, 'update');
+          }
+          s.outcome.residentsOut++;
+          break;
+        }
+        /* No confidence is moved here, deliberately. Somebody trapped is a casualty now,
+         * and the town already pays for a casualty saved and charges for one lost —
+         * paying twice for the same person would make a house fire worth more than
+         * anything else on the board. */
+        case 'RESIDENT_TRAPPED':
+          s.outcome.residentsTrapped++;
+          radio(s, `Somebody did not get out of ${BUILDING_BY_ID[e.buildingId].name}.`, 'bad');
           break;
         case 'VICTIM_SHOCKED':
           radio(s, 'Somebody has touched that line.', 'bad');

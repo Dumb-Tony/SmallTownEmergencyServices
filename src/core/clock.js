@@ -46,7 +46,16 @@ export class GameClock {
   advance(realDeltaMs, onStep) {
     if (this.paused) return 0;
 
-    let dt = realDeltaMs;
+    /* A frame delta that is not a number poisons the clock FOREVER: it lands in the
+     * accumulator, every comparison against NaN is false, and the simulation runs zero
+     * steps for the rest of the session with nothing on screen to explain it. rAF hands
+     * out finite timestamps so this is hardening rather than a live bug, but the cost of
+     * being wrong is the whole session and the guard is one line. */
+    let dt = Number(realDeltaMs);
+    if (Number.isNaN(dt)) dt = 0;
+    // Infinity is not special: it is simply a very long frame, and the clamp below is
+    // what long frames are for. Only NaN has to be caught, because it survives every
+    // comparison and would sit in the accumulator for ever.
     if (dt > this.maxFrameMs) { dt = this.maxFrameMs; this.clampedFrames++; }
     if (dt < 0) dt = 0;
 

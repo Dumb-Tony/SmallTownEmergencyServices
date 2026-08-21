@@ -14,6 +14,7 @@ import { dist } from '../data/town.js';
 import { contextPrompt, toolsInReachOf, heldTool } from '../sim/interaction.js';
 import { victimState } from '../sim/victims.js';
 import { gasAt } from '../sim/hazards.js';
+import { stillInside } from '../sim/residents.js';
 import { confidenceWord } from './shiftReport.js';
 
 const PRIORITY_CLASS = { routine: 'p-routine', high: 'p-high', critical: 'p-critical' };
@@ -71,6 +72,7 @@ export class Hud {
             <div><b>1–5</b> take kit from the nearest truck</div>
             <div><b>F</b> put it down</div>
             <div><b>Q</b> siren</div>
+            <div><b>V</b> hold to see the whole town</div>
             <div><b>TAB</b> call detail &nbsp; <b>ESC</b> pause &nbsp; <b>M</b> mute</div>
             <div><b>mouse</b> aim what you are holding</div>
             <div class="coopkeys"><b>P</b> add a second volunteer — arrows, <b>RShift</b>, <b>/</b>, <b>.</b>, <b>,</b>, numpad</div>
@@ -233,6 +235,15 @@ export class Hud {
     this.el.clock.classList.toggle('urgent', left < 60000);
     this.el.shift.textContent = `Shift ${s.town.shiftNumber}`;
     this.el.confBar.style.width = `${Math.round(s.town.confidence * 100)}%`;
+    /* This red is NOT --bad, on purpose, and the suite pins the divergence so nobody
+     * "tidies" it (tools/m10-tests.js D25c).
+     *
+     * --bad was lightened from #e06a5a to #f0928a to get a chip label from 2.90:1 to
+     * 5.17:1 — the chip is small text ON the colour, so contrast is what it needs. This
+     * bar is the opposite shape: a block of colour with the words beside it, not on it,
+     * and what it needs is SEPARATION between its three steps. Measured, the lighter red
+     * costs warn/bad 9.5 -> 3.2 dE00, which is amber and red becoming the same bar at a
+     * glance. Two signals, two jobs, two reds. */
     this.el.confBar.style.background = s.town.confidence > 0.6 ? '#7fd17f'
       : s.town.confidence > 0.35 ? '#e8c04a' : '#e06a5a';
     this.el.confWord.textContent = confidenceWord(s.town.confidence);
@@ -310,13 +321,21 @@ export class Hud {
       const people = worst
         ? `<span class="chip ${worst.condition < CONFIG.medical.criticalAt ? 'bad' : 'warn'}">${vic.length} patient${vic.length > 1 ? 's' : ''} · ${victimState(worst)}</span>`
         : '';
+      /* The number that decides whether anybody goes inside.
+       *
+       * The radio says it once, at the moment the first person walks out, and then it
+       * scrolls away — so on a board with four calls on it, the one fact that changes
+       * what the crew does next lives for about eight seconds. It belongs on the card. */
+      const inside = inc.buildingId ? stillInside(s, inc.buildingId) : 0;
+      const unaccounted = inside > 0
+        ? `<span class="chip bad">${inside} still inside</span>` : '';
       return `<li class="${PRIORITY_CLASS[inc.priority]} ${inc.status}">
           <div class="row1"><span class="head">${inc.headline}</span>
             <span class="dist">${d} m</span></div>
           <div class="row2"><span class="place">${inc.place}</span>
             <span class="age">${age}</span></div>
           <div class="danger"><i style="width:${Math.round(inc.danger * 100)}%"></i></div>
-          ${people}${detail}
+          ${unaccounted}${people}${detail}
         </li>`;
     }).join('');
   }

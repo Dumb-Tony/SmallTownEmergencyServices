@@ -61,9 +61,27 @@ game.bus.onAny((evt) => audio.onEvent(evt.type, evt, evt.simTimeMs));
 
 /* The coach retires a lesson the first time the player DOES the thing, not after a
    timer or a click, and the flags live in the town save so shift three is quiet. */
+/* A save that fails is not allowed to fail quietly.
+ *
+ * saveTown returns false when the browser refuses — a full quota, private browsing, a
+ * locked-down profile — and every call site ignored it. Measured: with storage refused,
+ * three shifts ran and the player was shown "Shift 1" three times, with the town
+ * silently resetting each time and nothing anywhere saying so. Told once, on the radio
+ * the player is already reading, because told every shift is nagging. */
+let saveWarned = false;
+function persist(town) {
+  if (saveTown(town)) return true;
+  if (!saveWarned) {
+    saveWarned = true;
+    radio(game.state, 'This browser will not let the game save. The town will not carry '
+      + 'over to the next shift.', 'bad');
+  }
+  return false;
+}
+
 game.bus.onAny((evt) => {
   if (game.state.town && learnFromEvent(game.state.town.learned || (game.state.town.learned = {}), evt.type)) {
-    saveTown(game.state.town);
+    persist(game.state.town);
   }
 });
 
@@ -85,6 +103,17 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') { e.preventDefault(); audio.toggleMute(); hud.setMuted(audio.muted); }
   if (e.code === 'KeyP' && game.state.mode === MODES.PLAYING) {
     e.preventDefault();
+    /* Not while somebody is connected over the network.
+     *
+     * P adds or removes the SECOND responder, and a remote player IS the second
+     * responder. Pressing it during a network game evicted them: measured, the crew
+     * dropped to one while the link stayed open and the status still read "connected",
+     * so the client went on playing a town it was no longer in — and pressing P again
+     * gave their slot to a local partner, so their commands went nowhere. */
+    if (net.online) {
+      radio(game.state, 'Somebody is already on the crew over the network.', 'system');
+      return;
+    }
     const on = toggleCoop(game.state);
     radio(game.state, on ? 'Second volunteer signed on. Arrow keys, right shift, and /.'
       : 'Second volunteer signed off.', 'system');
@@ -157,11 +186,22 @@ function frame(now) {
   /* The readability budget scales with the screen. 165 m across a 390 px phone is
      2.4 px/m — a person is two pixels and a street sign is nothing — so a hand-held
      device gets a proportionally tighter view rather than the same one shrunk. */
-  const wanted = Math.max(
-    TouchControls.viewWidthFor(camera.cssW, anyDriving),
-    spread * 1.9);
+  /* Hold V (or the MAP button) to see the whole town.
+   *
+   * The GDD asks a player to be able to answer "what am I not doing right now", and
+   * triage is the game's central verb — but the camera only ever showed one street, so
+   * the answer lived entirely in the dispatch list. This pauses NOTHING: the fire keeps
+   * spreading while you look at it, which is the only version of an overview this
+   * design allows (implementation rule 3). */
+  const overview = input.isDown('overview') && game.state.mode === MODES.PLAYING;
+  const wanted = overview
+    ? WORLD.widthM + CONFIG.render.fitPaddingM * 2
+    : Math.max(TouchControls.viewWidthFor(camera.cssW, anyDriving), spread * 1.9);
   if (Math.abs(camera.viewWidthM - wanted) > 0.2) {
-    const k = 1 - Math.exp(-CONFIG.render.zoomLerp * Math.min(dt, 100) / 1000);
+    // Out fast, back at the usual pace: a peek that takes a second to arrive is a peek
+    // nobody uses while a building is burning.
+    const rate = CONFIG.render.zoomLerp * (overview ? 2.6 : 1);
+    const k = 1 - Math.exp(-rate * Math.min(dt, 100) / 1000);
     camera.viewWidthM += (wanted - camera.viewWidthM) * k;
     camera._recomputeScale();
   }
@@ -201,7 +241,7 @@ function frame(now) {
   else audio.hush();
   /* Driving is learned by doing it: the odometer is already kept for the shift report. */
   if (game.state.town && learnFromDistance(game.state.town.learned || {}, game.state.telemetry.distanceDrivenM)) {
-    saveTown(game.state.town);
+    persist(game.state.town);
   }
   hud.setHint(nextHint(game.state, { learned: game.state.town && game.state.town.learned, touch: touch.enabled }));
 

@@ -1,5 +1,5 @@
 # harness scratch — tools\smoketest.ps1 builds and deletes this
-_smoketest.html
+_smoketest*.html
 
 # OS / editor
 Thumbs.db
@@ -15,4 +15,4 @@ desktop.ini
 *.pem
 
 # smoke-test scratch
-_smoketest.html
+_smoketest*.html

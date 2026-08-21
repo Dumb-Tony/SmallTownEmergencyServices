@@ -16,8 +16,14 @@
  * drives a whole host+client pair over a loopback link, with no WebRTC in sight.
  */
 
-import { BUILDING_BY_ID } from '../data/town.js';
+import { BUILDINGS, BUILDING_BY_ID } from '../data/town.js';
 import { buildFireCells } from '../sim/hazards.js';
+import { RESIDENT_STATES } from '../sim/residents.js';
+
+/** Buildings by position in the authored table. The town is data, both ends load the same
+ *  data, and a version check already refuses a peer that does not — so a building costs
+ *  one digit on the wire instead of eleven characters. */
+const BUILDING_IX = BUILDINGS.map((b) => b.id);
 
 export const MSG = Object.freeze({
   HELLO: 'hello',     // client -> host, on connect
@@ -27,7 +33,7 @@ export const MSG = Object.freeze({
   BYE: 'bye',
 });
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /* ── numbers ──────────────────────────────────────────────────────────────
  * Everything positional is quantised to centimetres and sent as an integer. A town
@@ -105,6 +111,23 @@ export function encodeSnapshot(state) {
       d: v.delivered ? 1 : 0, l: v.lost ? 1 : 0, nt: v.needsTransport ? 1 : 0,
       ic: v.incidentId || 0,
     })),
+    /* Residents travel, because a client that cannot see the crowd cannot see why their
+       partner is walking slowly, and a client watching a house fire with nobody coming
+       out of it is watching a different game.
+
+       A TUPLE, and INDICES rather than names. The obvious version — one object per
+       person with `state` and `homeId` as strings, plus a facing angle — measured at
+       78 bytes a head and 35% of the whole snapshot, for nineteen people in a message
+       that also carries a fully involved building cell by cell. Field names and building
+       ids are the bulk of that, and the facing was pure waste: drawResident does not draw
+       a facing. Only what is DRAWN travels; the rest — nerve, mobility, the exposure
+       clock, who they are watching — stays on the host, where the decisions are made. */
+    re: (state.residents || []).map((r) => [
+      r.id, q(r.x), q(r.y),
+      RESIDENT_STATES.indexOf(r.state),
+      BUILDING_IX.indexOf(r.homeId),
+      r.insideBuildingId ? BUILDING_IX.indexOf(r.insideBuildingId) : -1,
+    ]),
     hz: state.hazards.map((h) => encodeHazard(h)),
     in: state.incidents.map((i) => ({
       i: i.id, h: i.headline, p: i.place, pr: i.priority, s: i.status,
@@ -171,6 +194,16 @@ export function applySnapshot(state, snap) {
     v.trappedBy = d.tb || null; v.draggedBy = d.db || null;
     v.inApparatusId = d.ia || null; v.delivered = !!d.d; v.lost = !!d.l;
     v.needsTransport = !!d.nt; v.incidentId = d.ic || null;
+  });
+
+  /* A shell, not a resident: the client never steps one, so it has no use for the fields
+     that only matter to a decision. Everything drawResident touches is here. */
+  const people = (snap.re || []).map(([i, x, y, st, hm, ib]) => ({ i, x, y, st, hm, ib }));
+  syncList(state.residents, people, (d) => ({ id: d.i, victimId: null, facing: 0 }), (r, d) => {
+    r.x = u(d.x); r.y = u(d.y);
+    r.state = RESIDENT_STATES[d.st] || 'home';
+    r.homeId = BUILDING_IX[d.hm] || BUILDING_IX[0];
+    r.insideBuildingId = d.ib >= 0 ? BUILDING_IX[d.ib] : null;
   });
 
   syncList(state.hazards, snap.hz, (d) => makeHazardShell(d), (h, d) => applyHazard(h, d));
@@ -247,15 +280,46 @@ export function encodeCommand(cmd) {
   };
 }
 
+/**
+ * Decode a command from a peer. NOTHING here may trust its input.
+ *
+ * This is the one function in the game whose argument is written by somebody else's
+ * machine, and it used to index `m.a[0]` and `m.d[0]` straight off the wire. Measured:
+ * `{t:'cmd'}` with no fields THREW out of the host's message handler, and
+ * `{a:['x','y']}` was accepted as an axis of (NaN, NaN) — which walks the remote
+ * responder to a non-finite position that never recovers, and takes the camera with it,
+ * because main.js follows the mean of the crew's positions. A stale tab or a hand-built
+ * packet was enough for either.
+ *
+ * So: every number is coerced and range-checked, every field has a floor, and anything
+ * unrecognisable falls back to "this player pressed nothing this frame".
+ */
 export function decodeCommand(m) {
+  if (!m || typeof m !== 'object') return { ...EMPTY_COMMAND, axis: { x: 0, y: 0 }, drive: { throttle: 0, steer: 0 } };
+  const pair = (v, scale, limit) => {
+    if (!Array.isArray(v)) return null;
+    const x = Number(v[0]), y = Number(v[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x: clampTo(scale(x), limit), y: clampTo(scale(y), limit) };
+  };
+  const axis = pair(m.a, u3, 1) || { x: 0, y: 0 };
+  const drive = pair(m.d, u3, 1) || { x: 0, y: 0 };
+  // An aim is a world position, so it is bounded by the world rather than by 1.
+  const aim = pair(m.m, u, 100000);
+
+  const slotRaw = Number(m.l);
+  const slot = Number.isFinite(slotRaw) && slotRaw >= 0 && slotRaw < 5 ? Math.floor(slotRaw) : null;
+
   return {
-    axis: { x: u3(m.a[0]), y: u3(m.a[1]) },
-    drive: { throttle: u3(m.d[0]), steer: u3(m.d[1]) },
-    aim: m.m ? { x: u(m.m[0]), y: u(m.m[1]) } : null,
+    axis,
+    drive: { throttle: drive.x, steer: drive.y },
+    aim,
     interact: !!m.i, drop: !!m.p, use: !!m.u, siren: !!m.s,
-    slot: m.l < 0 ? null : m.l,
+    slot,
   };
 }
+
+function clampTo(v, limit) { return Math.min(limit, Math.max(-limit, v)); }
 
 export const EMPTY_COMMAND = Object.freeze({
   axis: { x: 0, y: 0 }, drive: { throttle: 0, steer: 0 }, aim: null,

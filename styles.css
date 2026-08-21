@@ -14,7 +14,7 @@
   --amber: #ffab3d;
   --good: #7fd17f;
   --warn: #e8c04a;
-  --bad: #e06a5a;
+  --bad: #f0928a;      /* 2.90:1 -> 5.17:1 on the panel plate (tools/m10-tests.js) */
 }
 
 * { box-sizing: border-box; }
@@ -41,7 +41,9 @@ html, body {
 }
 
 .pill {
-  background: rgba(23,21,34,0.86); border: 1px solid var(--line);
+  /* 0.86 -> 0.94: the plate is what --dim text sits on, and at 0.86 the grass showed
+     through enough to put five HUD labels under 4.5:1. Measured 4.39 -> 5.59. */
+  background: rgba(23,21,34,0.94); border: 1px solid var(--line);
   border-radius: 8px; padding: 6px 11px;
   font-size: 13px; font-weight: 600; letter-spacing: 0.2px;
   display: flex; align-items: center; gap: 8px;
@@ -54,7 +56,7 @@ html, body {
 #confidence .bar i { display: block; height: 100%; background: var(--good); transition: width .3s; }
 #confidence .word { color: var(--dim); font-size: 12px; font-style: italic; }
 #vehicle { margin-left: auto; }
-.pill.mute { font-size: 10.5px; letter-spacing: 1.6px; color: var(--lime); min-width: 62px; justify-content: center; }
+.pill.mute { font-size: 11px; letter-spacing: 1.6px; color: var(--lime); min-width: 62px; justify-content: center; }
 .pill.mute.off { color: var(--dim); text-decoration: line-through; }
 
 .chip {
@@ -66,7 +68,9 @@ html, body {
 .chip.bad  { background: rgba(224,106,90,0.20); color: var(--bad); }
 .chip.patient { background: rgba(138,127,240,0.22); color: #c3bcff; }
 .chip.siren { background: rgba(255,90,90,0.25); color: #ffd4d4; animation: flash .6s steps(2, end) infinite; }
-@keyframes flash { 50% { opacity: 0.35; } }
+/* Flash the PLATE, not the text. Fading the whole chip took its label to 2.17:1 at the
+   bottom of every cycle — the one moment it most needs reading. */
+@keyframes flash { 50% { background: rgba(255,90,90,0.05); } }
 
 /* ── dispatch list ─────────────────────────────────────────────────────── */
 
@@ -77,19 +81,23 @@ html, body {
 }
 #calls.expanded { width: 340px; }
 .calls-head {
-  font-size: 10.5px; letter-spacing: 2px; color: var(--dim);
+  font-size: 11px; letter-spacing: 2px; color: var(--dim);
   padding: 2px 4px 8px; display: flex; justify-content: space-between;
 }
-.calls-head .hint { opacity: 0.6; letter-spacing: 0.5px; }
+.calls-head .hint { letter-spacing: 0.5px; }   /* 60% opacity was 2.65:1 */
 #calls ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 #calls li {
   background: var(--panel-2); border-left: 3px solid var(--dim);
   border-radius: 5px; padding: 7px 9px; font-size: 12.5px;
 }
 #calls li.quiet { border-left-color: #3a4a3a; color: var(--dim); font-style: italic; }
-#calls li.p-routine  { border-left-color: #ffe082; }
-#calls li.p-high     { border-left-color: var(--amber); }
-#calls li.p-critical { border-left-color: var(--coral); }
+/* Priority is carried by WIDTH and STYLE as well as colour. Measured under simulated
+   tritanopia the three old colours were 5.0 apart (CIEDE2000) — a greyscale check passes
+   them because they differ almost entirely along b*, which is the axis that deficiency
+   takes. The new set is 13.7 apart; the border is the redundancy. */
+#calls li.p-routine  { border-left: 3px solid #fff0c0; }
+#calls li.p-high     { border-left: 4px double #e8850f; }
+#calls li.p-critical { border-left: 6px solid #c0271f; }
 #calls li.queued .head::after { content: ' ·  unattended'; color: var(--dim); font-weight: 400; font-size: 11px; }
 #calls .row1 { display: flex; justify-content: space-between; font-weight: 700; }
 #calls .row2 { display: flex; justify-content: space-between; color: var(--dim); font-size: 11.5px; margin-top: 1px; }
@@ -107,7 +115,9 @@ html, body {
   display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
 }
 #prompt, #slots {
-  background: rgba(23,21,34,0.86); border: 1px solid var(--line);
+  /* 0.86 -> 0.94: the plate is what --dim text sits on, and at 0.86 the grass showed
+     through enough to put five HUD labels under 4.5:1. Measured 4.39 -> 5.59. */
+  background: rgba(23,21,34,0.94); border: 1px solid var(--line);
   border-radius: 8px; padding: 7px 11px; font-size: 13px;
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
@@ -214,7 +224,7 @@ kbd {
 
 /* ── multiplayer: the join row on the title card, the status chip up top ───── */
 #netrow{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;flex-wrap:wrap}
-#netrow .or{color:#6d7a86;font-size:12px;letter-spacing:.06em}
+#netrow .or{color:#8a97a3;font-size:12px;letter-spacing:.06em}
 #netrow button.ghost{background:transparent;border:1px solid #38505f;color:#bcd3e0;
   padding:8px 14px;border-radius:7px;font:600 13px/1 system-ui,sans-serif;cursor:pointer}
 #netrow button.ghost:hover{border-color:#5aa6c8;color:#eaf6ff;background:#12232e}
@@ -254,11 +264,12 @@ kbd {
 .tbtn {
   width: 16vmin; height: 16vmin; max-width: 92px; max-height: 92px;
   border-radius: 50%; border: 2px solid rgba(150,190,220,0.4);
-  background: rgba(12,20,28,0.55); color: #eaf4ff;
+  background: rgba(12,20,28,0.75); color: #eaf4ff;   /* 4.02:1 -> 7.89:1 */
   display: grid; place-items: center; line-height: 1.05;
   font: 700 4vmin/1 system-ui, sans-serif;
 }
-.tbtn span { font-size: 2.1vmin; font-weight: 600; opacity: 0.65; }
+/* 2.1vmin is 8.2 px on a 390 px phone (and 15 px on the desktop this was written on). */
+.tbtn span { font-size: max(11px, 2.1vmin); font-weight: 600; opacity: 0.8; }
 .tbtn.on { background: rgba(90,166,200,0.55); border-color: #9fd8ef; }
 .tbtn.primary { background: rgba(28,64,40,0.6); border-color: rgba(140,220,160,0.5); }
 .tbtn.use { background: rgba(70,40,20,0.6); border-color: rgba(240,180,110,0.55); }
@@ -270,8 +281,8 @@ kbd {
 .tslot {
   pointer-events: auto; touch-action: none;
   padding: 1.4vmin 2.2vmin; border-radius: 8px;
-  border: 1px solid rgba(150,190,220,0.4); background: rgba(12,20,28,0.6);
-  color: #ffe9b0; font: 700 2.6vmin/1 system-ui, sans-serif;
+  border: 1px solid rgba(150,190,220,0.4); background: rgba(12,20,28,0.75);
+  color: #ffe9b0; font: 700 max(12px, 2.6vmin)/1 system-ui, sans-serif;
 }
 .tslot.on { background: rgba(90,166,200,0.6); color: #fff; }
 
@@ -288,7 +299,7 @@ kbd {
   #calls:not(.expanded) li:nth-child(n+3) { display: none; }
   /* Clear of the thumbs. Measured with tools_layoutdiag.js: at 504x748 the radio log
      overlapped the button cluster by 172 x 59 px and the prompt sat on the stick. */
-  #radio { max-width: 46vw; width: auto; right: 6px; box-sizing: border-box; font-size: 10px; bottom: 40vmin; }
+  #radio { max-width: 46vw; width: auto; right: 6px; box-sizing: border-box; font-size: 12px; bottom: 40vmin; }
   #radio div:nth-child(n+3) { display: none; }
   #bottom {
     top: 76px; bottom: auto; left: 8px; right: auto;
@@ -341,3 +352,16 @@ kbd {
 .report .nextshift b { color: #fff3d8; font-weight: 700; }
 .report .pastshifts { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
 .report .pastshifts span { font-size: 11.5px; color: var(--dim); font-style: italic; }
+.tbtn.map { background: rgba(24,44,60,0.6); border-color: rgba(140,200,235,0.5); }
+
+/* ── reduced motion ────────────────────────────────────────────────────────
+   Honoured for the CSS layer here; the canvas reads the same preference through
+   src/ui/a11y.js motionScalars(), so a damped siren is still lit and a damped marker
+   still pulses — it holds at the MIDDLE of its swing rather than disappearing. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

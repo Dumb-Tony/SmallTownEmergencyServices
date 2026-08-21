@@ -6,7 +6,10 @@
  *
  * INVARIANT: no gameplay system may call Math.random(). Bag composition, spawn order
  * and every authored variation draw from a seeded stream so a shift replays exactly.
- * tools\m0-tests.js greps src/ for Math.random and fails the build if one appears.
+ * tools\m0-tests.js section H2 greps src/ for Math.random and fails if one appears
+ * outside the single allowed exception (net.js randCode — a predictable room code is
+ * not a room code). That claim sat here for a long time with no such test behind it,
+ * and in the meantime the audio layer's noise bed was built from Math.random.
  */
 
 export function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);

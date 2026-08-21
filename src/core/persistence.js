@@ -91,7 +91,11 @@ function sanitiseHydrants(obj) {
   if (!obj || typeof obj !== 'object') return out;
   for (const [id, rec] of Object.entries(obj)) {
     if (!rec || typeof rec !== 'object') continue;
+    // shiftsDown MUST survive a save: it is the only thing that ever repairs a hydrant,
+    // and rebuilding the record without it made the repair arm of advanceShift dead code.
     out[id] = { damaged: !!rec.damaged };
+    const down = Number(rec.shiftsDown);
+    if (Number.isFinite(down) && down > 0) out[id].shiftsDown = Math.min(9, Math.round(down));
   }
   return out;
 }
@@ -142,24 +146,40 @@ export function advanceShift(town, summary) {
     history: [...town.history, summary].slice(-12),
   };
 
+  /* A gutted building is boarded for `repairShifts` shifts and then reopens.
+   *
+   * It used to be a FIXED POINT, and the town could only ever get worse: boarding was
+   * re-set to repairShifts whenever damage was at or above 0.6, and damage was never
+   * allowed to fall while boarded — so damage stayed high, so it was boarded again, for
+   * ever. Measured over twelve unattended shifts: seven buildings boarded by shift four
+   * and all seven STILL boarded on shift thirteen, every record pinned at 2, with the
+   * sites available for a structure fire stuck at three out of ten. The countdown has to
+   * run on its own, not on a condition the countdown itself keeps true. */
   for (const [id, rec] of Object.entries(town.buildings)) {
-    const boarded = rec.damage >= 0.6
-      ? Math.max(rec.boardedShifts, CONFIG.town.repairShifts)
-      : Math.max(0, rec.boardedShifts - 1);
-    // Crews and contractors chip away at it between shifts.
-    const repaired = boarded > 0 ? rec.damage : Math.max(0, rec.damage - 0.34);
-    if (repaired <= 0.001 && boarded === 0) continue;   // fully repaired: forget it
-    next.buildings[id] = {
-      damage: repaired,
-      boardedShifts: boarded > 0 ? boarded - 1 : 0,
-      timesBurned: rec.timesBurned,
-    };
+    let boarded = rec.boardedShifts || 0;
+    let damage = rec.damage;
+    if (boarded > 0) {
+      boarded -= 1;                       // one shift of the repair goes by
+      if (boarded === 0) damage = 0;      // the contractors finish and it reopens
+    } else if (damage >= 0.6) {
+      boarded = CONFIG.town.repairShifts; // gutted this shift: board it up
+    } else {
+      damage = Math.max(0, damage - 0.34);  // crews chip away at the lighter stuff
+    }
+    if (damage <= 0.001 && boarded === 0) continue;   // whole again: forget it
+    next.buildings[id] = { damage, boardedShifts: boarded, timesBurned: rec.timesBurned };
   }
 
+  /* A struck hydrant is out for the following shift, then the water board gets to it —
+   * which never once happened, because sanitiseHydrants rebuilt every record as
+   * { damaged } and dropped `shiftsDown` on every load, so the repair arm below was
+   * unreachable through a real save. Measured: six save/load cycles, still damaged, and
+   * a bot campaign where broken hydrants only ever went up. */
   for (const [id, rec] of Object.entries(town.hydrants)) {
-    // A struck hydrant is out for the following shift, then the water board gets to it.
-    if (rec.damaged && !rec.shiftsDown) next.hydrants[id] = { damaged: true, shiftsDown: 1 };
-    else if (rec.damaged && rec.shiftsDown >= 1) { /* repaired */ }
+    if (!rec.damaged) continue;
+    const down = (rec.shiftsDown || 0) + 1;
+    if (down <= CONFIG.town.hydrantDownShifts) next.hydrants[id] = { damaged: true, shiftsDown: down };
+    // else: repaired, and simply not carried forward
   }
 
   return next;

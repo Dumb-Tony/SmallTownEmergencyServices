@@ -42,6 +42,11 @@ export const DEFAULT_BINDINGS = Object.freeze({
   p2Slot3: ['Numpad3', 'Digit8'], p2Slot4: ['Numpad4', 'Digit9'],
   p2Slot5: ['Numpad5', 'Digit0'],
 
+  /* Hold to see the whole town. Triage is the game's central verb and the GDD asks a
+     player to be able to answer "what am I not doing right now" — which was impossible
+     while the camera only ever showed one street. It pauses nothing. */
+  overview:  ['KeyV'],
+
   calls:     ['Tab'],
   pause:     ['Escape'],
   restart:   ['KeyR'],

@@ -34,7 +34,11 @@ if (-not (Test-Path $testPath)) { Write-Host "Tests not found: $testPath" -Foreg
 # Scratch copy in the served root, so every relative module path still resolves.
 # -Encoding UTF8 is REQUIRED: PS 5.1's Get-Content defaults to ANSI, so a UTF-8 source
 # file round-trips into double-encoded mojibake and the test runs against a corrupt copy.
-$scratchName = "_smoketest.html"
+# The scratch page is named after the PORT, so two runs at once cannot stomp each other.
+# With a fixed name they did: a suite launched on one port served another run's injected
+# module and reported its results as if they were its own, which is a silent, confusing
+# lie rather than a failure.
+$scratchName = "_smoketest-$Port.html"
 $scratch = Join-Path $root $scratchName
 $html = Get-Content $gamePath -Raw -Encoding UTF8
 if ($html -notmatch '</body>') { Write-Host "No </body> in $Game." -ForegroundColor Red; exit 2 }
